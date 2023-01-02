@@ -1,0 +1,13 @@
+/mininet/.cache
+/mininet/.config
+/mininet/.bash_history
+/mininet/.mininet_history
+/mininet/.python_history
+/mininet/**/__pycache__
+<<<<<<< HEAD
+/mininet/**/*.pyc
+/jupyter/work/.ipynb_checkpoints
+/jupyter/dataset/*
+=======
+/mininet/**/*.pyc
+>>>>>>> parent of 105ab60c (update)

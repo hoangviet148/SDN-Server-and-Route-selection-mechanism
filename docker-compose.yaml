@@ -1,0 +1,137 @@
+version: "3"
+services:
+
+  mininet:
+    image: local/mininet:v1
+    tty: true
+    container_name: mininet
+    privileged: true
+    environment:
+     - DISPLAY
+    volumes:
+     - /sys/:/sys/
+     - /lib/modules:/lib/modules
+     - ./mininet:/root
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.9
+
+  onos-1:
+    container_name: onos-1
+    hostname: onos-1
+    image: local/onos
+    ports:
+      - 8181:8181
+    environment:
+      - ONOS_APPS=gui,drivers.bmv2,lldpprovider,hostprovider,proxyarp,route-service,openflow,openflow-base
+    volumes:
+      - ./onos-cluster/configuration/onos/onos-1.json:/root/onos/config/cluster.json
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.11
+
+  onos-2:
+    container_name: onos-2
+    hostname: onos-2
+    image: local/onos
+    # ports:
+    #   - 8181:8181
+    environment:
+      - ONOS_APPS=gui,drivers.bmv2,lldpprovider,hostprovider,proxyarp,route-service,openflow,openflow-base
+    volumes:
+      - ./onos-cluster/configuration/onos/onos-2.json:/root/onos/config/cluster.json
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.12
+
+  onos-3:
+    container_name: onos-3
+    hostname: onos-3
+    image: local/onos
+    # ports:
+    #   - 8181:8181
+    environment:
+      - ONOS_APPS=gui,drivers.bmv2,lldpprovider,hostprovider,proxyarp,route-service,openflow,openflow-base
+    volumes:
+      - ./onos-cluster/configuration/onos/onos-3.json:/root/onos/config/cluster.json
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.13
+
+
+  atomix-1:
+    container_name: atomix-1
+    hostname: atomix-1
+    image: atomix/atomix:3.1.5
+    expose:
+      - 5678
+      - 5679
+    volumes:
+      - ./onos-cluster/configuration/atomix/atomix-1.conf:/opt/atomix/conf/atomix.conf
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.111
+
+  atomix-2:
+    container_name: atomix-2
+    hostname: atomix-2
+    image: atomix/atomix:3.1.5
+    expose:
+      - 5678
+      - 5679
+    volumes:
+      - ./onos-cluster/configuration/atomix/atomix-2.conf:/opt/atomix/conf/atomix.conf
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.112
+
+  atomix-3:
+    container_name: atomix-3
+    hostname: atomix-3
+    image: atomix/atomix:3.1.5
+    expose:
+      - 5678
+      - 5679
+    volumes:
+      - ./onos-cluster/configuration/atomix/atomix-3.conf:/opt/atomix/conf/atomix.conf
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.113
+
+  flask:
+    image: local/flask:v1
+    container_name: flask
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    volumes:
+     - ./mininet:/app
+    environment:
+      - FLASK_APP=./app.py
+      - FLASK_DEBUG=1
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.14
+
+  jupyter:
+    image: local/jupyter:python-3.10.8
+    container_name: jupyter
+    ports: 
+      - "8888:8888"
+    volumes:
+     - ./jupyter/work:/home/jovyan/work
+     - ./jupyter/dataset:/home/jovyan/dataset
+     - ./jupyter/config/jupyter-config.json:/home/jovyan/.jupyter/jupyter_notebook_config.json
+     - ./jupyter/config:/home/jovyan/.jupyter/config
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.15
+
+
+networks:
+  esnet1:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.10.0.0/16
