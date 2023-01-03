@@ -2,7 +2,7 @@ version: "3"
 services:
 
   mininet:
-    image: local/mininet:v1
+    image: local/mininet:latest
     tty: true
     container_name: mininet
     privileged: true
@@ -98,34 +98,34 @@ services:
       esnet1:
         ipv4_address: 172.10.0.113
 
-  flask:
-    image: local/flask:v1
-    container_name: flask
-    ports:
-      - "5000:5000"
-    restart: unless-stopped
-    volumes:
-     - ./mininet:/app
-    environment:
-      - FLASK_APP=./app.py
-      - FLASK_DEBUG=1
-    networks:
-      esnet1:
-        ipv4_address: 172.10.0.14
+  # flask:
+  #   image: local/flask:v1
+  #   container_name: flask
+  #   ports:
+  #     - "5000:5000"
+  #   restart: unless-stopped
+  #   volumes:
+  #    - ./mininet:/app
+  #   environment:
+  #     - FLASK_APP=./app.py
+  #     - FLASK_DEBUG=1
+  #   networks:
+  #     esnet1:
+  #       ipv4_address: 172.10.0.14
 
-  jupyter:
-    image: local/jupyter:python-3.10.8
-    container_name: jupyter
-    ports: 
-      - "8888:8888"
-    volumes:
-     - ./jupyter/work:/home/jovyan/work
-     - ./jupyter/dataset:/home/jovyan/dataset
-     - ./jupyter/config/jupyter-config.json:/home/jovyan/.jupyter/jupyter_notebook_config.json
-     - ./jupyter/config:/home/jovyan/.jupyter/config
-    networks:
-      esnet1:
-        ipv4_address: 172.10.0.15
+  # jupyter:
+  #   image: local/jupyter:python-3.10.8
+  #   container_name: jupyter
+  #   ports: 
+  #     - "8888:8888"
+  #   volumes:
+  #    - ./jupyter/work:/home/jovyan/work
+  #    - ./jupyter/dataset:/home/jovyan/dataset
+  #    - ./jupyter/config/jupyter-config.json:/home/jovyan/.jupyter/jupyter_notebook_config.json
+  #    - ./jupyter/config:/home/jovyan/.jupyter/config
+  #   networks:
+  #     esnet1:
+  #       ipv4_address: 172.10.0.15
 
 
 networks:

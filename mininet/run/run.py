@@ -3,7 +3,7 @@ import time
 import os
 
 from mininet.net import Mininet
-from mininet.node import RemoteController, Host, OVSKernelSwitch, OVSSwitch
+from mininet.node import RemoteController, Host, OVSSwitch
 from mininet.cli import CLI
 from mininet.log import setLogLevel, info
 
@@ -11,7 +11,7 @@ from mininet.log import setLogLevel, info
 
 os.system("sudo mn -c")
 set_up_topo = json.load(open('../setup/setup_topo.json'))
-# setLogLevel('debug')
+setLogLevel('debug')
 
 controllers = [ c for c in set_up_topo['controllers'] ]
 switches = [ sw for sw in set_up_topo['switches'] ]
@@ -41,7 +41,7 @@ not_host = []
 
 info( '*** Add switches\n')
 for switch in switches:
-    switch_net = net.addSwitch(switch['name'], cls=OVSSwitch)
+    switch_net = net.addSwitch(switch['name'])
     switches_save[switch['name']] = switch_net
 
 info( '*** Adding hosts\n' )

@@ -1,7 +1,4 @@
-FROM ubuntu:20.04
-
-# ADD dashc /root/dashc
-# ADD topology.py /root/.
+FROM ramonfontes/mininet-wifi
 
 USER root
 WORKDIR /root
@@ -10,6 +7,7 @@ COPY ENTRYPOINT.sh /
 COPY requirements.txt /requirements.txt
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    sudo \
     curl \
     iproute2 \
     iputils-ping \
