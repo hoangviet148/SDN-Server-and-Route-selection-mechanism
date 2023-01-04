@@ -4,10 +4,15 @@
 /mininet/.mininet_history
 /mininet/.python_history
 /mininet/**/__pycache__
-<<<<<<< HEAD
 /mininet/**/*.pyc
+
 /jupyter/work/.ipynb_checkpoints
 /jupyter/dataset/*
-=======
-/mininet/**/*.pyc
->>>>>>> parent of 105ab60c (update)
+
+/maven/app/.m2
+/maven/app/.cache
+/maven/app/.javacpp
+/maven/app/.vscode-server
+/maven/app/model_infer/target
+/maven/app/models/*
+/maven/app/.bash_history
