@@ -13,6 +13,11 @@
 /maven/app/.cache
 /maven/app/.javacpp
 /maven/app/.vscode-server
+
 /maven/app/model_infer/target
-/maven/app/models/*
+/maven/app/model_infer/models/*
+
 /maven/app/.bash_history
+/maven/app/sdn_cnn/dataset/*
+/maven/app/sdn_cnn/model/*
+/maven/app/sdn_cnn/target/*.jar
