@@ -2,7 +2,7 @@ version: "3"
 services:
 
   mininet:
-    image: local/mininet:latest
+    image: local/mininet:v1
     tty: true
     container_name: mininet
     privileged: true

@@ -32,7 +32,7 @@
     <property name="java.class.version" value="55.0"/>
     <property name="java.specification.name" value="Java Platform API Specification"/>
     <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
-    <property name="os.version" value="5.15.0-56-generic"/>
+    <property name="os.version" value="5.15.0-57-generic"/>
     <property name="library.jansi.path" value="/usr/share/maven/lib/jansi-native"/>
     <property name="user.home" value="/root"/>
     <property name="user.timezone" value="GMT+07:00"/>
@@ -43,7 +43,7 @@
     <property name="java.class.path" value="/usr/share/maven/boot/plexus-classworlds-2.x.jar"/>
     <property name="java.vm.specification.version" value="11"/>
     <property name="sun.arch.data.model" value="64"/>
-    <property name="sun.java.command" value="org.codehaus.plexus.classworlds.launcher.Launcher package"/>
+    <property name="sun.java.command" value="org.codehaus.plexus.classworlds.launcher.Launcher clean package"/>
     <property name="java.home" value="/opt/java/openjdk"/>
     <property name="user.language" value="en"/>
     <property name="java.specification.vendor" value="Oracle Corporation"/>

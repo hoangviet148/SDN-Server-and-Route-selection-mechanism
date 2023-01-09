@@ -11,7 +11,7 @@
   <properties>
      <maven.compiler.source>1.8</maven.compiler.source>
      <maven.compiler.target>1.8</maven.compiler.target>
-     <tensorflow.version>0.4.0</tensorflow.version>
+     <tensorflow.version>0.4.2</tensorflow.version>
   </properties>
 
   <dependencies>
@@ -33,5 +33,51 @@
       <artifactId>tensorflow-framework</artifactId>
       <version>${tensorflow.version}</version>
     </dependency>
+
+    <dependency>
+      <groupId>tech.tablesaw</groupId>
+      <artifactId>tablesaw-core</artifactId>
+      <version>0.41.0</version>
+    </dependency>
+
+       <dependency>
+       <groupId>org.slf4j</groupId>
+       <artifactId>slf4j-api</artifactId>
+       <version>1.7.5</version>
+   </dependency>
+   <dependency>
+       <groupId>org.slf4j</groupId>
+       <artifactId>slf4j-log4j12</artifactId>
+       <version>1.7.5</version>
+   </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <archive>
+                <manifest>
+                  <mainClass>
+                      org.tensorflow.model.examples.dense.SimpleMnist
+                  </mainClass>
+                </manifest>
+              </archive>
+              <descriptorRefs>
+                <descriptorRef>jar-with-dependencies</descriptorRef>
+              </descriptorRefs>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
