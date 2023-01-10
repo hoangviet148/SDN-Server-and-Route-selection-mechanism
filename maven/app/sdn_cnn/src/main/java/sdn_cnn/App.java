@@ -29,7 +29,7 @@ public class App {
     public static void main(String[] args) {
         try {
             // get path to model folder
-            String modelPath = "/root/sdn_cnn/model";
+            String modelPath = "/root/sdn_cnn/model_2";
             // load saved model
             SavedModelBundle model = SavedModelBundle.load(modelPath, "serve");
             SignatureDef sig = model.metaGraphDef().getSignatureDefMap().get("serving_default");
@@ -37,27 +37,23 @@ public class App {
             System.out.println(sig);
 
             // Read data
-            // String test_dir = "/root/sdn_cnn/dataset/GQUIC_small/Test/GQUIC_test_10.csv";
-            // Table t = Table.read().csv(test_dir);
+            String test_dir = "/root/sdn_cnn/dataset/GQUIC_small/Test/GQUIC_test_32.csv";
+            Table table = Table.read().csv(test_dir);
 
             // IntNdArray input_matrix = NdArrays.ofInts(Shape.of(1, 20, 128, 1));
-            DoubleNdArray input_matrix = NdArrays.ofDoubles(Shape.of(1, 9));
-            Double[][] test = {
-                {1.0}, {2.0}
-            };
-
+            DoubleNdArray input_matrix = NdArrays.ofDoubles(Shape.of(-1, 20, 128, 1));
+          
             input_matrix.set(NdArrays.vectorOf(1.0, 2.0, 3.0, 5.0, 7.0, 21.0, 23.0, 43.0, 123.0), 0);
             System.out.println(input_matrix.getDouble(0,1));
             Tensor input_tensor = TFloat64.tensorOf(input_matrix);
             // Tensor output = model.session()
             //     .runner()
             //     .feed("input_name", input_tensor)
-            //     .fetch("output_name")
-            //     .run()
-            //     .expect(TFloat64.class);
-            // System.out.println(input_matrix);
+            //     // .fetch("output_name")
+            //     .run();
+            System.out.println(input_matrix);
             Map<String, Tensor> feed_dict = new HashMap<>();
-            feed_dict.put("context", input_tensor);
+            feed_dict.put("input_tensor", input_tensor);
 
             System.out.println(model.function("serving_default").call(feed_dict));
         } catch (Exception e) {

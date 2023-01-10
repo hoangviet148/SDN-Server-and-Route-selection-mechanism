@@ -1,0 +1,13 @@
+version: "3"
+services: 
+  flask:
+      image: local/predict_service:v1
+      container_name: predict_service
+      ports:
+        - "5000:5000"
+      restart: unless-stopped
+      volumes:
+      - ./:/app
+      environment:
+        - FLASK_APP=./app.py
+        - FLASK_DEBUG=1

@@ -22,6 +22,7 @@ import org.tensorflow.op.io.WriteFile;
 import org.tensorflow.types.TFloat32;
 import org.tensorflow.types.TString;
 import org.tensorflow.types.TUint8;
+import org.tensorflow.proto.framework.SignatureDef;
 
 public class FasterRcnnInception {
 
@@ -129,9 +130,14 @@ public class FasterRcnnInception {
         //my test image
         String imagePath = params[0];
         // get path to model folder
-        String modelPath = "/root/models/faster_rcnn_inception_resnet_v2_1024x1024";
+        String modelPath = "/root/model_infer/models/faster_rcnn_inception_resnet_v2_1024x1024";
         // load saved model
         SavedModelBundle model = SavedModelBundle.load(modelPath, "serve");
+
+        SignatureDef sig = model.metaGraphDef().getSignatureDefMap().get("serving_default");
+        System.out.println(model.metaGraphDef().getSignatureDefMap());
+        System.out.println(sig);
+
         //create a map of the COCO 2017 labels
         TreeMap<Float, String> cocoTreeMap = new TreeMap<>();
         float cocoCount = 0;

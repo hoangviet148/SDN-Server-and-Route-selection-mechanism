@@ -20,4 +20,10 @@
 /maven/app/.bash_history
 /maven/app/sdn_cnn/dataset/*
 /maven/app/sdn_cnn/model/*
+/maven/app/sdn_cnn/model_2/*
 /maven/app/sdn_cnn/target/*.jar
+
+/rabbitmq/data
+/rabbitmq/log
+
+/model-infer-service/model/*
