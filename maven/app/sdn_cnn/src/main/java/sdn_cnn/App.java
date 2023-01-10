@@ -25,7 +25,6 @@ public class App {
         "Youtube"
     };
 
-    
 
     public static void main(String[] args) {
         try {
@@ -65,8 +64,6 @@ public class App {
             System.out.println("Something went wrong." + e);
         }
     }
-
-    
 
     private int most_frequent(int[] list) {
         if (list == null || list.length == 0) {
