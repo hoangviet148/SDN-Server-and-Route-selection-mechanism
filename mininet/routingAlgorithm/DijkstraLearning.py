@@ -4,7 +4,7 @@ sys.path.append(PATH_ABSOLUTE + 'handledata/models')
 sys.path.append(PATH_ABSOLUTE + 'core')
 sys.path.append(PATH_ABSOLUTE + 'api')
 
-# import flowRule
+import flowRule
 import Dijkstra
 
 class hostServerConnection(object):
@@ -86,25 +86,25 @@ class hostServerConnection(object):
       
         return dest_object.get_ip()
       
-    # def add_flow(self, host_object, dest_object, path):
+    def add_flow(self, host_object, dest_object, path):
 
-    #     # di chieu nguoc den tu server duoc chon quay ve goc
-    #     self.reverse_sol = Dijkstra.Dijkstra( topo=self.topo, start= dest_object, end= host_object)
-    #     self.reverse_sol.routing()
-    #     reverse_path = self.reverse_sol.get_result()
+        # di chieu nguoc den tu server duoc chon quay ve goc
+        self.reverse_sol = Dijkstra.Dijkstra( topo=self.topo, start= dest_object, end= host_object)
+        self.reverse_sol.routing()
+        reverse_path = self.reverse_sol.get_result()
 
-    #     # add flow chieu thuan
-    #     flow = flowRule.flowRule(topo = self.topo, shortest_path = path, src = host_object, dst = dest_object)
-    #     flow.add_flow_rule(self.priority)
-    #     flow_rule = flow.get_json_rule()
+        # add flow chieu thuan
+        flow = flowRule.flowRule(topo = self.topo, shortest_path = path, src = host_object, dst = dest_object)
+        flow.add_flow_rule(self.priority)
+        flow_rule = flow.get_json_rule()
 
-    #     # print("\n\nadd reverse flow JSon")
-    #     reverse_flow = flowRule.flowRule(topo = self.topo, shortest_path = reverse_path, src = dest_object, dst = host_object)
-    #     reverse_flow.add_flow_rule(self.priority)
-    #     reverse_flow_rule = reverse_flow.get_json_rule()
+        # print("\n\nadd reverse flow JSon")
+        reverse_flow = flowRule.flowRule(topo = self.topo, shortest_path = reverse_path, src = dest_object, dst = host_object)
+        reverse_flow.add_flow_rule(self.priority)
+        reverse_flow_rule = reverse_flow.get_json_rule()
         
-    #     flow.write_json_rule_to_file(json_rule_path = flow_rule, 
-    #                              json_rule_reversing_path= reverse_flow_rule)
+        flow.write_json_rule_to_file(json_rule_path = flow_rule, 
+                                 json_rule_reversing_path= reverse_flow_rule)
 
     
 

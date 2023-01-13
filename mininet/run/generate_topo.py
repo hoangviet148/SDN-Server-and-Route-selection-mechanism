@@ -1,4 +1,4 @@
-# import set_up_mininet
+import setup_mininet
 import json, os, time, random
 import requests
 import sys, json
@@ -76,28 +76,14 @@ def generate_topo(net, hosts_save):
     print(server_list)
 
     name_host = name_hosts
-
-def start_server(set_server, net):
-    strGet=''
-    background_get_iperf_cmd=''
-
-    # Traverse server
-    print('------------------   PING SERVER  -----------------------')
-    for server in set_server: 
-        strGet=str(server)
-        print(strGet)
-        # get object server i
-        p=net.get(str(server))
-        
-        # run in background to receive http server
-        background_get_http_cmd = 'source ../get_reponding_time/venv/bin/activate;python ../get_reponding_time/http-fastapi-server.py &'
-        p.cmd(background_get_http_cmd)
-
-def call_routing_api_flask(host):
-    print("call flask")
-    response = requests.post("http://172.10.0.13:5000/getIpServer", data= host)  
-    dest_ip = response.text
-    return str(dest_ip)
+    run_shedule()
 
 def run_shedule(generate_flow, net, life_time):
     print("generate_flow--------")
+    des = call_routing_api_flask( p.IP() )
+
+def call_routing_api_flask(host):
+    print("call flask")
+    response = requests.post("http://flask:5000/getIpServer", data=host)  
+    dest_ip = response.text
+    return str(dest_ip)

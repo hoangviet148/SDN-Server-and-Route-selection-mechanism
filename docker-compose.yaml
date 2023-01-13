@@ -11,6 +11,7 @@ services:
     volumes:
      - /sys/:/sys/
      - /lib/modules:/lib/modules
+     - /tmp/.X11-unix:/tmp/.X11-unix
      - ./mininet:/root
     networks:
       esnet1:
@@ -34,8 +35,8 @@ services:
     container_name: onos-2
     hostname: onos-2
     image: local/onos
-    # ports:
-    #   - 8181:8181
+    ports:
+      - 8182:8181
     environment:
       - ONOS_APPS=gui,drivers.bmv2,lldpprovider,hostprovider,proxyarp,route-service,openflow,openflow-base
     volumes:
@@ -44,19 +45,19 @@ services:
       esnet1:
         ipv4_address: 172.10.0.12
 
-  onos-3:
-    container_name: onos-3
-    hostname: onos-3
-    image: local/onos
-    # ports:
-    #   - 8181:8181
-    environment:
-      - ONOS_APPS=gui,drivers.bmv2,lldpprovider,hostprovider,proxyarp,route-service,openflow,openflow-base
-    volumes:
-      - ./onos-cluster/configuration/onos/onos-3.json:/root/onos/config/cluster.json
-    networks:
-      esnet1:
-        ipv4_address: 172.10.0.13
+  # onos-3:
+  #   container_name: onos-3
+  #   hostname: onos-3
+  #   image: local/onos
+  #   # ports:
+  #   #   - 8181:8181
+  #   environment:
+  #     - ONOS_APPS=gui,drivers.bmv2,lldpprovider,hostprovider,proxyarp,route-service,openflow,openflow-base
+  #   volumes:
+  #     - ./onos-cluster/configuration/onos/onos-3.json:/root/onos/config/cluster.json
+  #   networks:
+  #     esnet1:
+  #       ipv4_address: 172.10.0.13
 
 
   atomix-1:
@@ -85,34 +86,28 @@ services:
       esnet1:
         ipv4_address: 172.10.0.112
 
-  atomix-3:
-    container_name: atomix-3
-    hostname: atomix-3
-    image: atomix/atomix:3.1.5
-    expose:
-      - 5678
-      - 5679
+  flask:
+    image: local/flask:v1
+    container_name: flask
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
     volumes:
-      - ./onos-cluster/configuration/atomix/atomix-3.conf:/opt/atomix/conf/atomix.conf
+     - ./mininet:/app
+    environment:
+      - FLASK_APP=/app/app.py
+      - FLASK_DEBUG=1
     networks:
       esnet1:
-        ipv4_address: 172.10.0.113
+        ipv4_address: 172.10.0.14
 
-  # flask:
-  #   image: local/flask:v1
-  #   container_name: flask
-  #   ports:
-  #     - "5000:5000"
-  #   restart: unless-stopped
-  #   volumes:
-  #    - ./mininet:/app
-  #   environment:
-  #     - FLASK_APP=./app.py
-  #     - FLASK_DEBUG=1
-  #   networks:
-  #     esnet1:
-  #       ipv4_address: 172.10.0.14
-
+networks:
+  esnet1:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.10.0.0/16
   # jupyter:
   #   image: local/jupyter:python-3.10.8
   #   container_name: jupyter
@@ -127,11 +122,3 @@ services:
   #     esnet1:
   #       ipv4_address: 172.10.0.15
 
-
-networks:
-  esnet1:
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.10.0.0/16

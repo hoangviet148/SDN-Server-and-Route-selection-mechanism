@@ -7,7 +7,7 @@ from mininet.node import RemoteController, Host, OVSSwitch
 from mininet.cli import CLI
 from mininet.log import setLogLevel, info
 
-# import generate_topo
+import generate_topo
 
 os.system("sudo mn -c")
 set_up_topo = json.load(open('../setup/setup_topo.json'))
@@ -57,7 +57,8 @@ info( '*** Add links\n')
 for bridge in bridges:
     net.addLink(switches_save[bridge[0]], switches_save[bridge[1]])
 net.addLink("s2", "s5", port1=10, port2=10)
-net.addLink("s8", "s6", port1=20, port2=20)
+net.addLink("s2", "s4", port1=20, port2=20)
+net.addLink("s2", "s6", port1=30, port2=30)
 
 # add edge switch to host
 print(switches)

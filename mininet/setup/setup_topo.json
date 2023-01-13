@@ -1,7 +1,6 @@
 { 
     "hosts": [{"name": "h21", "mac": "00:00:00:01:01:21"}, 
-              {"name": "h22", "mac": "00:00:00:01:02:22"},
-              {"name": "h23", "mac": "00:00:00:01:03:23"}
+              {"name": "h22", "mac": "00:00:00:02:01:22"}
     ],  
 
     "servers": [{"name": "h22", "mac": "00:00:00:01:01:21"}],
@@ -11,8 +10,7 @@
     "controller_type": "remote",
      
     "bridges": [["s1", "s2"], ["s1", "s3"], ["s2", "s3"],
-                ["s4", "s5"], ["s5", "s6"], ["s4", "s6"],
-                ["s7", "s8"], ["s8", "s9"], ["s7", "s9"]
+                ["s4", "s5"], ["s5", "s6"], ["s4", "s6"]
             ],
     
     "switches": [{"name": "s1", "hosts": ["h21"]},
@@ -20,15 +18,11 @@
                  {"name": "s3", "hosts": []},
                  {"name": "s4", "hosts": ["h22"]},
                  {"name": "s5", "hosts": []},
-                 {"name": "s6", "hosts": []},
-                 {"name": "s7", "hosts": ["h23"]},
-                 {"name": "s8", "hosts": []},
-                 {"name": "s9", "hosts": []}
+                 {"name": "s6", "hosts": []}
     ],
   
     "controllers": [ 
         {"ip": "172.10.0.11", "controller": "onos","controller_port": 6653, "rest_port": 8181, "switches" : ["s1", "s2", "s3"]},
-        {"ip": "172.10.0.12", "controller": "onos","controller_port": 6653, "rest_port": 8181, "switches" : ["s4", "s5", "s6"]},
-        {"ip": "172.10.0.13", "controller": "onos","controller_port": 6653, "rest_port": 8181, "switches" : ["s7", "s8", "s9"]}
+        {"ip": "172.10.0.12", "controller": "onos","controller_port": 6653, "rest_port": 8181, "switches" : ["s4", "s5", "s6"]}
     ]
 }

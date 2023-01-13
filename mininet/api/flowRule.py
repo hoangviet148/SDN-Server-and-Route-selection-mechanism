@@ -229,18 +229,18 @@ class flowRule(object):
         Automatically POST rulePath to API
         return 200 if successul routing
         """
-        with open("/home/onos/Downloads/A-Server-and-Route-selection-mechanism/flaskAPI/jsonRulePath.json") as json_file:
+        with open("../jsonRulePath.json") as json_file:
                 data_raw = json.load(json_file)
 
         headers = {
                     "Content-Type": "application/json",
                     "Accept": "application/json",
-                    "Authorization": "Basic a2FyYWY6a2FyYWY="
+                    "Authorization": "Basic b25vczpyb2Nrcw=="
                     }
 
         # try:
             # get full ip of SDN
-        set_up_topo = json.load(open('/home/onos/Downloads/A-Server-and-Route-selection-mechanism/flaskAPI/set_up/set_up_topo.json'))
+        set_up_topo = json.load(open('../setup/setup_topo.json'))
         controllers = [controller for controller in set_up_topo["controllers"]]
     
         for i in range(len(controllers)):
