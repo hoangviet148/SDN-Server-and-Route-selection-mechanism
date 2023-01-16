@@ -1,7 +1,7 @@
 import sys
 import time
 
-class Update_weight_ccdn(Object):
+class Update_weight_ccdn(object):
     def __init__(self, topo, update_server, list_ip):
         self.LinkVersions = ""
         self.count = 0

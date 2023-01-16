@@ -1,6 +1,9 @@
 import sys
-sys.path.append('../core')
-sys.path.append('../handledata/models')
+
+PATH_ABSOLUTE = "/app"
+
+sys.path.append(PATH_ABSOLUTE + '/core')
+sys.path.append(PATH_ABSOLUTE + '/handleData/models')
 
 import CustomHost, Flow, Flows, Instruction, Selector, Treatment, Criteria
 import json
@@ -175,7 +178,7 @@ class flowRule(object):
         self.jsonRulePath = json_rule_path
         #self.call_routing_api()
         
-        with open('../jsonRulePath.json', 'w') as json_file:
+        with open(PATH_ABSOLUTE + '/jsonRulePath.json', 'w') as json_file:
             json.dump( json_rule_path, json_file)
 
         self.call_routing_api()
@@ -229,7 +232,7 @@ class flowRule(object):
         Automatically POST rulePath to API
         return 200 if successul routing
         """
-        with open("../jsonRulePath.json") as json_file:
+        with open(PATH_ABSOLUTE + "/jsonRulePath.json") as json_file:
                 data_raw = json.load(json_file)
 
         headers = {
@@ -240,7 +243,7 @@ class flowRule(object):
 
         # try:
             # get full ip of SDN
-        set_up_topo = json.load(open('../setup/setup_topo.json'))
+        set_up_topo = json.load(open(PATH_ABSOLUTE + '/setup/setup_topo.json'))
         controllers = [controller for controller in set_up_topo["controllers"]]
     
         for i in range(len(controllers)):

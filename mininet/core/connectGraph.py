@@ -1,6 +1,8 @@
 import json
 import ast
 
+PATH_ABSOLUTE = ('/app')
+
 class connectGraph(object):
     def __init__(self, file_topos, file_hosts):
         self.file_topos = file_topos
@@ -19,6 +21,7 @@ class connectGraph(object):
                 with open(file) as handle:
                     object = json.loads(handle.read()).replace(': false', ':False').replace(': true', ':True')
                     object = ast.literal_eval(object)
+                print("connectGraph - Read topo success")
             except:
                 print("Read topo error!")
                 raise
@@ -31,7 +34,7 @@ class connectGraph(object):
                 result_topo['links'].append(link)
 
             # add bridges to Topo file
-            with open('../run/bridges.txt', 'r') as bridges:
+            with open(PATH_ABSOLUTE + '/run/bridges.txt', 'r') as bridges:
                 for bridge in bridges:
                     result_topo['links'].append(json.loads(bridge.rstrip()))
 
@@ -41,7 +44,7 @@ class connectGraph(object):
                 result_topo['devices'].append(switch)
 
         # ghi ra file topo hop nhat mang
-        file_topo_done = '../topo.json'
+        file_topo_done = PATH_ABSOLUTE + '/topo.json'
         with open(file_topo_done, 'w') as output_file:
             json.dump(result_topo, output_file)
 
@@ -70,18 +73,16 @@ class connectGraph(object):
                 device_id = str(location['elementId'])
 
                 # cau
-                bridges = open('../run/bridges.txt', 'r').readlines()
-                list_bridges = [json.loads(host)['src']['id']
+                bridges = open(PATH_ABSOLUTE + '/run/bridges.txt', 'r').readlines()
+                list_bridges = [json.loads(host)['src']['device']
                                 for host in bridges]
 
-                print(device_id)
+                # print(device_id)
 
                 if str(device_id) in list_bridges:
                     print("XOA HOST ", host_ip, "TU THIET BI", device_id)
                     continue
-
                 else:
-
                     # add host data to Host file
                     host_value = {
                         'port': port,
@@ -92,6 +93,6 @@ class connectGraph(object):
                     result_host['hosts'].append(host_value)
 
         # ghi ra file host cuoi cung
-        file_host_done = '../host.json'
+        file_host_done = PATH_ABSOLUTE + '/host.json'
         with open(file_host_done, 'w') as output_file:
             json.dump(result_host, output_file)

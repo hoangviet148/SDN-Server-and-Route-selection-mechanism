@@ -1,8 +1,8 @@
 import sys,os
-PATH_ABSOLUTE = ('../')
-sys.path.append(PATH_ABSOLUTE + 'handledata/models')
-sys.path.append(PATH_ABSOLUTE + 'core')
-sys.path.append(PATH_ABSOLUTE + 'api')
+PATH_ABSOLUTE = ('/app')
+sys.path.append(PATH_ABSOLUTE + '/handledata/models')
+sys.path.append(PATH_ABSOLUTE + '/core')
+sys.path.append(PATH_ABSOLUTE + '/api')
 
 import flowRule
 import Dijkstra
@@ -42,7 +42,7 @@ class hostServerConnection(object):
         self.topo.read_update_weight(link_versions)
     
     def find_src(self):
-        
+        print("=== host_object ===", self.hosts)
         host_object = self.hosts[self.host_ip]     
           
         return host_object
@@ -79,7 +79,7 @@ class hostServerConnection(object):
 
         print("-------Duong tot nhat ok------", self.sol.display_result() )
         # bat dau goi flow rule 
-        # print(path)
+        print("=== shortest path ===", path)
         print("Server cost cua path =", dest_object.get_server_cost())
 
         self.add_flow(host_object, dest_object, path)

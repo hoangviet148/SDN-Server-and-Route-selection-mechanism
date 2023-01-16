@@ -1,5 +1,8 @@
 import sys
-sys.path.append('../handleData/models')
+
+PATH_ABSOLUTE = "/app"
+
+sys.path.append(PATH_ABSOLUTE + '/handleData/models')
 import LinkCost
 
 class Topo(object):
@@ -50,7 +53,7 @@ class Topo(object):
         
         # print("src_object: ", src_object.get_id())
         # print("dest_object: ", dest_object.get_id())
-        print("node: ", self.nodes)
+        # print("node: ", self.nodes)
 
         if not (src_object in self.nodes and dest_object in self.nodes):
             raise ValueError('Node not in graph')
@@ -152,7 +155,7 @@ class Topo(object):
         # self.write_topo_file()
 
     def write_topo_file(self):
-        url = "../topo_file.txt"
+        url = PATH_ABSOLUTE + "/topo_file.txt"
 
         with open(url, "a") as file_object:
             for src in self.nodes:

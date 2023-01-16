@@ -1,7 +1,7 @@
 FROM ramonfontes/mininet-wifi
 
 USER root
-WORKDIR /root
+WORKDIR /app
 
 COPY ENTRYPOINT.sh /
 COPY requirements.txt /requirements.txt

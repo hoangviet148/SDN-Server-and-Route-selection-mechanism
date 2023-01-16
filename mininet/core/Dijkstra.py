@@ -1,5 +1,12 @@
 import heapq
 
+class vertex:
+    def __init__(self, cost, v):
+        self.cost = cost
+        self.v = v
+    def __lt__(self, nxt):
+        return self.cost < nxt.cost
+
 class Dijkstra(object):
     """Dijktra shortest path algorithm"""
     def __init__(self, topo, start, end):
@@ -65,7 +72,10 @@ class Dijkstra(object):
         visited = set()
 
         while self.heap:
-            (current_cost, u) = heapq.heappop(self.heap)
+            # (current_cost, u) = heapq.heappop(self.heap)
+            v = heapq.heappop(self.heap)
+            current_cost = v[0]
+            u = v[1]
     
             if u in visited:
                 continue
@@ -83,6 +93,7 @@ class Dijkstra(object):
                     next = current_cost + c
                     self.path[v] = u  # parent of v is u
                     self.distance[v] = next # update new distance
+                    print("=== (next, v) ===", self.heap, (next, v))
                     heapq.heappush(self.heap, (next, v))
         return -1
   

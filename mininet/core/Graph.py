@@ -1,10 +1,13 @@
 import sys
-sys.path.append('../handleData/models')
+
+PATH_ABSOLUTE = "/app"
+
+sys.path.append(PATH_ABSOLUTE + '/handleData/models')
 import CustomHost, CustomLink, CustomDevice
 import json
 import ast, os
 
-set_up_topo = json.load(open('../setup/setup_topo.json'))
+set_up_topo = json.load(open(PATH_ABSOLUTE + '/setup/setup_topo.json'))
 
 class Graph(object):
     """
@@ -19,12 +22,12 @@ class Graph(object):
         self.topo_file = ""
         self.host_file = ""
         PATH_CURRENT = './'
-        self.topo_path = PATH_CURRENT + topo_path
-        self.host_path = PATH_CURRENT + host_path
+        self.topo_path = topo_path
+        self.host_path = host_path
 
         # day la name cua host va server
-        self.name_hosts =   set_up_topo['hosts']
-        self.name_servers = set_up_topo['servers']
+        self.name_hosts = set_up_topo['hosts_test']
+        self.name_servers = set_up_topo['servers_test']
         self.load_topo()
 
     def load_topo(self):
@@ -33,7 +36,7 @@ class Graph(object):
         """
         with open(self.topo_path) as handle:
             self.topo_file = json.loads(handle.read())
-            print("=== topo_file ===", self.topo_file)
+            # print("=== topo_file ===", self.topo_file)
             #self.topo_file =  ast.literal_eval(self.topo_file)
             #print(self.topo_file)
         
@@ -49,6 +52,7 @@ class Graph(object):
         for link in self.topo_file['links']:
             src = link['src']
             dst = link['dst']
+            # print("=== link === ", src, dst)
        
             id_src = src['device']
             id_dst = dst['device']
@@ -102,12 +106,13 @@ class Graph(object):
             # Tach chuoi va lay so cuoi dia chi ip cua host
             host_ip_split = host_ip.split(".")
             name_host_tmp = "h"+str(host_ip_split[-1])
-            # print(name_host_tmp)
 
             if  name_host_tmp in self.name_hosts and host_ip not in hosts:
 
                     hosts[host_ip] = host_object               
                     self.topo.add_node(host_object)
+
+                    print("=== self.topo === ", self.topo)
                     
                     
                     edge1 = CustomLink.HostEdge(host_object, device, 0.0000001 , port)
@@ -137,10 +142,10 @@ class Graph(object):
         
         print("TAP SERVERS")
         for s in servers:
-            file_name = "../run/server_info/" + str(s) + ".txt"
-            if os.path.isfile(file_name): 
-                os.remove(file_name) 
-            f= open(file_name,"w+")
+            # file_name = PATH_ABSOLUTE + "/run/server_info/" + str(s) + ".txt"
+            # if os.path.isfile(file_name): 
+            #     os.remove(file_name) 
+            # f= open(file_name,"w+")
             print(s)
 
     def find_device(self, target):

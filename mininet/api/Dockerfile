@@ -9,4 +9,5 @@ RUN python3 -m pip install -r requirements.txt
 
 COPY . .
 
-CMD ["python", "/app/app.py"]
+CMD ["python3", "/app/api/app.py"]
+# CMD ["tail", "-f", "/dev/null"]

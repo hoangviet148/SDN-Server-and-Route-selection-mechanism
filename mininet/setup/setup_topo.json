@@ -3,7 +3,8 @@
               {"name": "h22", "mac": "00:00:00:02:01:22"}
     ],  
 
-    "servers": [{"name": "h22", "mac": "00:00:00:01:01:21"}],
+    "hosts_test": ["h21"],
+    "servers_test": ["h22"],
     
     "name_topo":"VtlWavenet2011",
   

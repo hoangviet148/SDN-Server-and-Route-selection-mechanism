@@ -2,6 +2,8 @@ import json
 import time
 import os
 
+PATH_ABSOLUTE = "/app"
+
 from mininet.net import Mininet
 from mininet.node import RemoteController, Host, OVSSwitch
 from mininet.cli import CLI
@@ -10,7 +12,7 @@ from mininet.log import setLogLevel, info
 import generate_topo
 
 os.system("sudo mn -c")
-set_up_topo = json.load(open('../setup/setup_topo.json'))
+set_up_topo = json.load(open(PATH_ABSOLUTE + '/setup/setup_topo.json'))
 setLogLevel('debug')
 
 controllers = [ c for c in set_up_topo['controllers'] ]
@@ -57,7 +59,6 @@ info( '*** Add links\n')
 for bridge in bridges:
     net.addLink(switches_save[bridge[0]], switches_save[bridge[1]])
 net.addLink("s2", "s5", port1=10, port2=10)
-net.addLink("s2", "s4", port1=20, port2=20)
 net.addLink("s2", "s6", port1=30, port2=30)
 
 # add edge switch to host
@@ -83,7 +84,7 @@ for key in controllers_save:
 
 net.pingAllFull()
 
-# generate_topo.generate_topo(net, hosts_save)
+generate_topo.generate_topo(net, hosts_save)
 CLI(net)
 
 net.stop()

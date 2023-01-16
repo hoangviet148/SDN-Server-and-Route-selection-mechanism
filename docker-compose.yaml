@@ -12,7 +12,7 @@ services:
      - /sys/:/sys/
      - /lib/modules:/lib/modules
      - /tmp/.X11-unix:/tmp/.X11-unix
-     - ./mininet:/root
+     - ./mininet:/app
     networks:
       esnet1:
         ipv4_address: 172.10.0.9
@@ -95,7 +95,7 @@ services:
     volumes:
      - ./mininet:/app
     environment:
-      - FLASK_APP=/app/app.py
+      - FLASK_APP=/app/mininet/api/app.py
       - FLASK_DEBUG=1
     networks:
       esnet1:

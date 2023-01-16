@@ -2,6 +2,8 @@ import requests
 import json
 from requests.auth import HTTPBasicAuth
 
+PATH_ABSOLUTE = ('/app')
+
 class BytesEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, bytes):
@@ -10,7 +12,7 @@ class BytesEncoder(json.JSONEncoder):
 
 # Get topo from onos
 def call_topo_api_sdn(list_ip):
-    print("call_topo_api_sdn")
+    print("call_topo_api_sdn function")
     for i in range(len(list_ip)):
         if list_ip[i]['controller'] == "onos":
             devices = requests.get('http://' + list_ip[i]['ip'] + ':8181/onos/v1/devices', 
@@ -28,7 +30,8 @@ def call_topo_api_sdn(list_ip):
             response = {**devicesDict, **hostsDict, **linksDict}
             topos = json.dumps(response)
 
-        with open('../topos/topo_'+str(i+1)+'.json', 'w') as f: json.dump(topos, f, cls=BytesEncoder)
+        with open(PATH_ABSOLUTE + '/topos/topo_'+str(i+1)+'.json', 'w') as f: json.dump(topos, f, cls=BytesEncoder)
+        with open(PATH_ABSOLUTE + '/hosts/host_'+str(i+1)+'.json', 'w') as f: json.dump(hosts, f, cls=BytesEncoder)
 
 
 def call_host_api_sdn(list_ip):

@@ -1,16 +1,18 @@
 from flask import Flask, request, jsonify
+import tensorflow as tf
+import numpy as np
 import sys, json
 import logging
 
 log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
+log.setLevel(logging.DEBUG)
 
-PATH_ABSOLUTE = "../"
+PATH_ABSOLUTE = "/app"
 
-sys.path.append(PATH_ABSOLUTE + 'routingAlgorithm')
+sys.path.append(PATH_ABSOLUTE + '/routingAlgorithm')
 import DijkstraLearning
 
-sys.path.append(PATH_ABSOLUTE + 'run')
+sys.path.append(PATH_ABSOLUTE + '/run')
 import generate_topo
 
 import ccdn
@@ -18,10 +20,8 @@ import ccdn
 # init
 app = Flask(__name__)
 
-# get full ip of SDN
-list_ip = json.load(open('../setup/setup_topo.json'))["controllers"]
-
 generate_topo_info = generate_topo.generate_topo_info()
+generate_topo_info.getApi()
 topo_network = generate_topo_info.get_topo_from_api()
 
 topo_network = generate_topo_info.get_topo_from_api()
@@ -51,10 +51,10 @@ def get_ip_server():
         object = DijkstraLearning.hostServerConnection(topo_network, hosts, servers, priority)
 
         # pass src ip param and get dest ip
-        object.set_host_ip(host_ip=str(host_ip))
+        object.set_host_ip(host_ip=str(host_ip, "utf-8"))
         # update_server.update_server_cost()
         dest_ip = object.find_shortest_path()
-
+        print(dest_ip)
         return str(dest_ip)
 
 @app.route('/predict', methods=['POST'])
@@ -63,7 +63,7 @@ def predict():
         request_data = request.get_json()
         x_test = request_data["flow"]
 
-        model = tf.keras.models.load_model("/app/model/model.h5")
+        model = tf.keras.models.load_model(PATH_ABSOLUTE + "/api/model/model.h5")
 
         predictions_1flow = model.predict(x_test)
         one_flow_pred = int(np.argmax(predictions_1flow, axis=-1))
