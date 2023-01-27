@@ -50,7 +50,6 @@ class generate_topo_info:
         print("=== name_hosts ===", name_hosts)
         print("=== name_servers ===", name_servers)
 
-
         return name_hosts, name_servers
     
     def get_topo_from_api(self):

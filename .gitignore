@@ -5,6 +5,7 @@
 /mininet/.python_history
 /mininet/**/__pycache__
 /mininet/**/*.pyc
+/mininet/**/*.log
 
 /jupyter/work/.ipynb_checkpoints
 /jupyter/dataset/*

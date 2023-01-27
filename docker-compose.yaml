@@ -87,7 +87,7 @@ services:
         ipv4_address: 172.10.0.112
 
   flask:
-    image: local/flask:v1
+    image: local/flask:null
     container_name: flask
     ports:
       - "5000:5000"
@@ -95,7 +95,7 @@ services:
     volumes:
      - ./mininet:/app
     environment:
-      - FLASK_APP=/app/mininet/api/app.py
+      - FLASK_APP=/app/api/app.py
       - FLASK_DEBUG=1
     networks:
       esnet1:

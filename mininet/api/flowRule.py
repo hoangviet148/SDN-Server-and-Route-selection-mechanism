@@ -49,9 +49,9 @@ class flowRule(object):
                     from_node = self.shortest_path[link].get_src()
                     to_node   = self.shortest_path[link].get_dest()
                     # abandon first edge 
-                    if isinstance( from_node, CusHost.Host ):
+                    if isinstance( from_node, CustomHost.Host ):
                         continue                                         
-                    elif isinstance( to_node, CusHost.Host):
+                    elif isinstance( to_node, CustomHost.Host):
 
                         device = from_node  
                         port_out =  self.shortest_path[link].get_port()
@@ -59,7 +59,7 @@ class flowRule(object):
                         previous_link = self.shortest_path[ link -1 ]
                         from_node = previous_link.get_src()
 
-                        if isinstance( from_node, CusHost.Host ):
+                        if isinstance( from_node, CustomHost.Host ):
                             port_in = previous_link.get_port()
                         else:
                             port_in = previous_link.get_port_in()                                 
@@ -71,7 +71,7 @@ class flowRule(object):
                         from_node = previous_link.get_src()
 
                         # trung gian dau tien bi vuong host
-                        if isinstance( from_node, CusHost.Host ):
+                        if isinstance( from_node, CustomHost.Host ):
                             port_in = previous_link.get_port()
                         else: # cac trung gian con lai
                             port_in = self.shortest_path[link-1].get_port_in()

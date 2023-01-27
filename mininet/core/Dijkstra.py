@@ -1,11 +1,4 @@
-import heapq
-
-class vertex:
-    def __init__(self, cost, v):
-        self.cost = cost
-        self.v = v
-    def __lt__(self, nxt):
-        return self.cost < nxt.cost
+import heapq_custom
 
 class Dijkstra(object):
     """Dijktra shortest path algorithm"""
@@ -73,7 +66,7 @@ class Dijkstra(object):
 
         while self.heap:
             # (current_cost, u) = heapq.heappop(self.heap)
-            v = heapq.heappop(self.heap)
+            v = heapq_custom.heappop1(self.heap)
             current_cost = v[0]
             u = v[1]
     
@@ -85,16 +78,16 @@ class Dijkstra(object):
                 self.minimum_cost = current_cost
                 # backtrack to save shortest path
                 self.save_result()
-                return 
+                return
                 
             for v, c, edge_address in self.edges[u]:
-                #print("vertex", v, "cost", v)
                 if v not in visited and current_cost + c < self.distance[v]:
                     next = current_cost + c
                     self.path[v] = u  # parent of v is u
                     self.distance[v] = next # update new distance
-                    print("=== (next, v) ===", self.heap, (next, v))
-                    heapq.heappush(self.heap, (next, v))
+                    print("=== cur heap && (next, v) ===", self.heap, (next, v)[0])
+                    heapq_custom.heappush1(self.heap, (next, v))
+                    print("=== insert success! ===", self.heap)
         return -1
   
     def save_result(self):

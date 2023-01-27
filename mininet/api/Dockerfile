@@ -5,9 +5,9 @@ WORKDIR /app
 ARG DEBIAN_FRONTEND=noninteractive
 
 COPY requirements.txt .
-RUN python3 -m pip install -r requirements.txt
+RUN python -m pip install -r requirements.txt
 
 COPY . .
 
-CMD ["python3", "/app/api/app.py"]
-# CMD ["tail", "-f", "/dev/null"]
+# CMD ["python3", "/app/api/app.py"]
+CMD ["tail", "-f", "/dev/null"]

@@ -10,8 +10,8 @@ services:
         - ./data/:/var/lib/rabbitmq/
         - ./log/:/var/log/rabbitmq
     networks:
-        - rabbitmq_go_net
+        - sdn-server-and-route-selection-mechanism_esnet1
 
 networks:
-  rabbitmq_go_net:
-    driver: bridge
+  sdn-server-and-route-selection-mechanism_esnet1:
+    external: true

@@ -1,6 +1,7 @@
 import pika
 import threading, sys, os
 import json, csv
+csv.field_size_limit(sys.maxsize)
 
 from io import StringIO
 # import tomli

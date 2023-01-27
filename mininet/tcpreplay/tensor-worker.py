@@ -2,7 +2,8 @@ import pika
 import json
 import os, sys, threading
 import time
-
+import tensorflow as tf
+import numpy as np
 # tensorflow
 # import tensorflow as tf
 # from keras.models import load_model
@@ -42,7 +43,7 @@ class ThreadedConsumer(threading.Thread):
         # request_data = request.get_json()
         # x_test = request_data["flow"]
 
-        # model = tf.keras.models.load_model("/app/model/model.h5")
+        model = tf.keras.models.load_model("/app/model/model.h5")
 
         predictions_1flow = model.predict(message['data'].padding().reshape(-1, 20, 128, 1))
         # one_flow_pred = int(np.argmax(predictions_1flow, axis=-1))

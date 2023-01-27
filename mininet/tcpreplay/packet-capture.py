@@ -8,7 +8,8 @@ connection = pika.BlockingConnection(pika.ConnectionParameters('rabbitmq'))
 channel = connection.channel()
 channel.queue_declare(queue=QUEUE_NAME)
 
-cmd = 'tshark -i s1-eth3 -Y "tcp.payload" \
+cmd = 'tshark -i any -d tcp.port==6633,openflow -O openflow_v4 \
+        -Y "tcp.payload" \
         -T fields \
         -e frame.time_epoch -e ip.src -e tcp.srcport -e ip.dst -e tcp.dstport -e ip.proto \
         -e _ws.col.Info -e tcp.payload \

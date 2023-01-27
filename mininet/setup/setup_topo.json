@@ -1,24 +1,26 @@
 { 
     "hosts": [{"name": "h21", "mac": "00:00:00:01:01:21"}, 
-              {"name": "h22", "mac": "00:00:00:02:01:22"}
+              {"name": "h22", "mac": "00:00:00:02:04:22"},
+              {"name": "h23", "mac": "00:00:00:01:02:23"}, 
+              {"name": "h24", "mac": "00:00:00:02:05:24"}
     ],  
 
-    "hosts_test": ["h21"],
-    "servers_test": ["h22"],
+    "hosts_test": ["h21", "h23"],
+    "servers_test": ["h22", "h24"],
     
     "name_topo":"VtlWavenet2011",
   
     "controller_type": "remote",
      
-    "bridges": [["s1", "s2"], ["s1", "s3"], ["s2", "s3"],
-                ["s4", "s5"], ["s5", "s6"], ["s4", "s6"]
-            ],
+    "bridges": [["s1", "s3"], ["s2", "s3"],
+                ["s5", "s6"], ["s4", "s6"]
+    ],
     
     "switches": [{"name": "s1", "hosts": ["h21"]},
-                 {"name": "s2", "hosts": []},
+                 {"name": "s2", "hosts": ["h23"]},
                  {"name": "s3", "hosts": []},
                  {"name": "s4", "hosts": ["h22"]},
-                 {"name": "s5", "hosts": []},
+                 {"name": "s5", "hosts": ["h24"]},
                  {"name": "s6", "hosts": []}
     ],
   

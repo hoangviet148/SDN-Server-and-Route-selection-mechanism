@@ -58,8 +58,7 @@ info( '*** Add links\n')
 # add edge switch to switch
 for bridge in bridges:
     net.addLink(switches_save[bridge[0]], switches_save[bridge[1]])
-net.addLink("s2", "s5", port1=10, port2=10)
-net.addLink("s2", "s6", port1=30, port2=30)
+net.addLink("s3", "s6", port1=10, port2=10)
 
 # add edge switch to host
 print(switches)
