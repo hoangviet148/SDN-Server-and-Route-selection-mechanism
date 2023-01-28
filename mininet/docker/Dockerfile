@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.8 \
     python3 \
     python3-pip \
+    tcpreplay \
  && rm -rf /var/lib/apt/lists/* \
  && echo AddressFamily inet >> /etc/ssh/sshd_config \
  && sed -i 's/prohibit-password/yes/' /etc/ssh/sshd_config \

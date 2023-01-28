@@ -42,8 +42,7 @@ print("SERVER: ", servers)
 
 ############################ CCDN ###############################
 update_server = updateEndPointModel.updateEndPointModel(servers)
-update_weight = ccdn.Update_weight_ccdn(
-    topo=topo_network, update_server=update_server, list_ip=list_ip)
+update_weight = ccdn.Update_weight_ccdn(topo=topo_network, update_server=update_server, list_ip=list_ip)
 
 priority = 200
 starttime = time.time()
@@ -64,7 +63,7 @@ def get_ip_server():
 
         # pass src ip param and get dest ip
         object.set_host_ip(host_ip=str(host_ip, "utf-8"))
-        update_server.update_server_cost()
+        # update_server.update_server_cost()
         dest_ip = object.find_shortest_path()
         print(dest_ip)
         return str(dest_ip)

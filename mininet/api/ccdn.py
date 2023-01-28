@@ -17,7 +17,7 @@ class Update_weight_ccdn(object):
         self.time_run = 60*60*5 # 60ph
         self.start_run = time.time()
     
-    def write_log_parameter(self,R, W,  read_delay, write_delay, time_staleness, version_staleness, avg_overhead):
+    def write_log_parameter(self, R, W, read_delay, write_delay, time_staleness, version_staleness, avg_overhead):
         self.count += 1
         time_current = int(time.time() - self.start_run)
         print("GHI tai gay thu : ", time_current)
