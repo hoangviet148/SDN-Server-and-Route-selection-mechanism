@@ -3,7 +3,7 @@ import sys
 PATH_ABSOLUTE = "/app"
 
 sys.path.append(PATH_ABSOLUTE + '/core')
-sys.path.append(PATH_ABSOLUTE + '/handleData/models')
+sys.path.append(PATH_ABSOLUTE + '/network-models')
 
 import CustomHost, Flow, Flows, Instruction, Selector, Treatment, Criteria
 import json

@@ -5,7 +5,7 @@
 /mininet/.python_history
 /mininet/**/__pycache__
 /mininet/**/*.pyc
-/mininet/**/*.log
+/mininet/tcpreplay/packet-capture.log
 
 /jupyter/work/.ipynb_checkpoints
 /jupyter/dataset/*
@@ -26,5 +26,7 @@
 
 /rabbitmq/data
 /rabbitmq/log
+
+/mongodb/data/*
 
 /model-infer-service/model/*

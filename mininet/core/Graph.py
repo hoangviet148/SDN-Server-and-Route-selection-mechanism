@@ -2,7 +2,7 @@ import sys
 
 PATH_ABSOLUTE = "/app"
 
-sys.path.append(PATH_ABSOLUTE + '/handleData/models')
+sys.path.append(PATH_ABSOLUTE + '/network-models')
 import CustomHost, CustomLink, CustomDevice
 import json
 import ast, os

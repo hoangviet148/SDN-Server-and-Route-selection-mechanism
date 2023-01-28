@@ -11,7 +11,7 @@ import apiSDN
 sys.path.append(PATH_ABSOLUTE + '/core')
 import connectGraph, Graph
 
-sys.path.append(PATH_ABSOLUTE + '/handleData/models')
+sys.path.append(PATH_ABSOLUTE + '/network-models')
 import CustomTopo
 
 class generate_topo_info:

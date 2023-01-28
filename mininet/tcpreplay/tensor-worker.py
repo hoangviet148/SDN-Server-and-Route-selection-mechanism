@@ -9,8 +9,8 @@ import numpy as np
 # from keras.models import load_model
 
 RABBIT_URL = 'rabbitmq'
-ROUTING_KEY = 'hello'
-QUEUE_NAME = 'hello'
+ROUTING_KEY = 'hello2'
+QUEUE_NAME = 'hello2'
 EXCHANGE = 'events'
 THREADS = 1
 PREFETCH_COUNT = 2 * THREADS
@@ -30,25 +30,27 @@ class ThreadedConsumer(threading.Thread):
         threading.Thread(target=self.channel.basic_consume(QUEUE_NAME, on_message_callback=self.callback))
 
     def callback(self, channel, method, properties, body):
-        # message = json.loads(body)
+        message = json.loads(body)
         # time.sleep(5)
-        # print(message)
-        data_test = [[[[]]]]
-        self.predict([2])
+        print("=== callback ===", message)
+        self.predict(message)
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def predict(self, message):
-        print(message)
+        # print(message)
 
         # request_data = request.get_json()
         # x_test = request_data["flow"]
 
-        model = tf.keras.models.load_model("/app/model/model.h5")
-
-        predictions_1flow = model.predict(message['data'].padding().reshape(-1, 20, 128, 1))
+        model = tf.keras.models.load_model("/app/api/model/model.h5")
+        temp = next(iter(message.values()))
+        print("=== data ===", temp['data'])
+        my_array = np.asarray(temp['data'])
+        # predictions_1flow = model.predict(my_array.reshape(-1, 20, 128, 1))
         # one_flow_pred = int(np.argmax(predictions_1flow, axis=-1))
 
         # return str(one_flow_pred)
+        return 1
 
         # with open(f"{self.thread_id}.json", "w") as outfile:
             # outfile.write(message)

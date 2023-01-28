@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import tensorflow as tf
 import numpy as np
 import sys, json
-import logging
+import threading, logging, time
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.DEBUG)
@@ -10,15 +10,21 @@ log.setLevel(logging.DEBUG)
 PATH_ABSOLUTE = "/app"
 
 sys.path.append(PATH_ABSOLUTE + '/routingAlgorithm')
-import DijkstraLearning
+import DijkstraLearning, updateEndPointModel
 
 sys.path.append(PATH_ABSOLUTE + '/run')
 import generate_topo
 
 import ccdn
 
+sys.path.append(PATH_ABSOLUTE + '/cost-models')
+import EndPointModel
+
 # init
 app = Flask(__name__)
+
+# get full ip of SDN
+list_ip = json.load(open(PATH_ABSOLUTE + '/setup/setup_topo.json'))["controllers"]
 
 generate_topo_info = generate_topo.generate_topo_info()
 generate_topo_info.getApi()
@@ -34,7 +40,13 @@ servers = generate_topo_info.get_server_from_api()
 print("HOSTS: ", hosts)
 print("SERVER: ", servers)
 
+############################ CCDN ###############################
+update_server = updateEndPointModel.updateEndPointModel(servers)
+update_weight = ccdn.Update_weight_ccdn(
+    topo=topo_network, update_server=update_server, list_ip=list_ip)
+
 priority = 200
+starttime = time.time()
 
 @app.route('/getIpServer', methods=['POST'])
 def get_ip_server():
@@ -52,7 +64,7 @@ def get_ip_server():
 
         # pass src ip param and get dest ip
         object.set_host_ip(host_ip=str(host_ip, "utf-8"))
-        # update_server.update_server_cost()
+        update_server.update_server_cost()
         dest_ip = object.find_shortest_path()
         print(dest_ip)
         return str(dest_ip)
@@ -70,5 +82,22 @@ def predict():
 
         return str(one_flow_pred)
 
+# fix cung R, W
+def ccdn():
+    global starttime
+    R = 4
+    W = 0
+    while True:
+        if time.time() - starttime > 45:
+            RD, WD, V_staleness = update_weight.load_CCDN(R, W)
+
+            # cap nhap trong so cho server
+            update_server.update_server_cost()
+            starttime = time.time()
+
+def flask_app():
+    app.run(host='0.0.0.0', debug=True, use_reloader=False, threaded=True) 
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    threading.Thread(target=flask_app).start()
+    threading.Thread(target=ccdn).start()
