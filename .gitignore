@@ -6,6 +6,7 @@
 /mininet/**/__pycache__
 /mininet/**/*.pyc
 /mininet/tcpreplay/packet-capture.log
+/mininet/**/*.pcap
 
 /jupyter/work/.ipynb_checkpoints
 /jupyter/dataset/*
