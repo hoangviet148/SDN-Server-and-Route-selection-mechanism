@@ -12,7 +12,7 @@ if [ -f "$CLIENT_$SERVER.pcap" ]; then
     exit 1
 fi
 
-tcprewrite --infile=$ORIGIN_PCAP --outfile="temp.pcap" --enet-smac=$CLIENT_MAC --enet-dmac=$SERVER_MAC --srcipmap=192.168.10.30:172.10.0.21 --dstipmap=192.168.10.35:172.10.0.24
+tcprewrite --infile=$ORIGIN_PCAP --outfile="temp.pcap" --enet-smacmap=60:02:92:21:4c:d2,$CLIENT_MAC
 # tcprewrite --infile="temp.pcap" --outfile="temp.pcap" --enet-smac=$SERVER_MAC --enet-dmac=$CLIENT_MAC --srcipmap=192.168.10.35:172.10.0.24 --dstipmap=192.168.10.30:172.10.0.21
 
 # tcprewrite --infile=$ORIGIN_PCAP --outfile="temp.pcap" --enet-smac=192.168.10.30,$CLIENT_MAC
