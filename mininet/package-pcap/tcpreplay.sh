@@ -6,6 +6,7 @@ SERVER_IP=$5
 SERVER_MAC=$6
 
 if [ -f "$CLIENT-$SERVER.pcap" ]; then
+    echo "==== start replay ===="
     tcpreplay -t --intf1="$CLIENT-eth0" $CLIENT-$SERVER.pcap
     exit 1
 fi
