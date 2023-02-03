@@ -1,9 +1,15 @@
-input = "14:c4:e1:2a:91:1c:da:2a:ab:b8:0f:27:93:b6:15:0d:c5:b5:bf:f9:7d:e2:18:cb:ce:ab:44:d0"
+import numpy as np
 
-def string_hex_to_int(hex_string):
-    for i in range(0, len(hex_string), 3):
-        print(i, hex_string[i:i+2], int(hex_string[i:i+2], 16))
-        
-    # return [int(hex_string[i:i+2], 16) for i in range(0, len(hex_string), 2)]
+list_of_lists = [[1, 2, 3], [1, 2]]
 
-string_hex_to_int(input)
+
+# Determine the maximum length of the lists
+max_len = max(len(lst) for lst in list_of_lists)
+
+# Pad each list with the default value (0 in this case)
+padded_list_of_lists = [lst + [0] * (max_len - len(lst)) for lst in list_of_lists]
+
+# Convert the list of lists to a 2D NumPy array
+array = np.array(padded_list_of_lists)
+
+print(array)

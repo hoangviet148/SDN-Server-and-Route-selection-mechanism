@@ -5,9 +5,6 @@ import time
 import tensorflow as tf
 import numpy as np
 import config
-# tensorflow
-# import tensorflow as tf
-# from keras.models import load_model
 
 class ThreadedConsumer(threading.Thread):
     def __init__(self, thread_id=-1):
@@ -30,25 +27,30 @@ class ThreadedConsumer(threading.Thread):
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def predict(self, message):
-        # print(message)
-
-        # request_data = request.get_json()
-        # x_test = request_data["flow"]
-
         model = tf.keras.models.load_model("/app/api/model/model.h5")
         temp = next(iter(message.values()))
-        print("=== data ===", temp['data'])
-        my_array = np.asarray(temp['data'])
-        # predictions_1flow = model.predict(my_array.reshape(-1, 20, 128, 1))
-        # one_flow_pred = int(np.argmax(predictions_1flow, axis=-1))
+        list_of_lists = temp["data"]
+        # Determine the maximum length of the lists
+        # max_len = max(len(lst) for lst in list_of_lists)
+        max_len = 2560
+        # Pad each list with the default value (0 in this case)
+        padded_list_of_lists = [lst + [0] * (max_len - len(lst)) for lst in list_of_lists]
 
-        # return str(one_flow_pred)
-        return 1
+        # Convert the list of lists to a 2D NumPy array
+        x_test = np.array(padded_list_of_lists)
 
+        x_test = x_test.reshape(-1, 20, 128, 1)
+        x_test = x_test / 255
+        # my_array.reshape(-1, 20, 128, 1)
+        #predictions_1flow = model.predict(my_array.reshape(-1, 20, 128, 1))
+        predictions_1flow = model.predict(x_test)
+        one_flow_pred = np.argmax(predictions_1flow, axis=-1)
+        print("=== one_flow_pred ===", one_flow_pred)
+
+        return one_flow_pred
         # with open(f"{self.thread_id}.json", "w") as outfile:
             # outfile.write(message)
         # src (ip-port) - dst(ip=port) - label - protocol (4-7)
-        # 
 
     def run(self):
         print ('starting thread to consume from rabbit...')

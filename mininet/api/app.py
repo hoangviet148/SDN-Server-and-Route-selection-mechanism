@@ -20,6 +20,9 @@ import ccdn
 sys.path.append(PATH_ABSOLUTE + '/cost-models')
 import EndPointModel
 
+sys.path.append(PATH_ABSOLUTE + '/dataPersist')
+import LinkVersion
+
 # init
 app = Flask(__name__)
 
@@ -68,6 +71,14 @@ def get_ip_server():
         print(dest_ip)
         return str(dest_ip)
 
+
+@app.route('/read_link_version/',  methods=['GET', 'POST'])
+def read_link_version():
+    # API: get data from load send to CCDN when there is a request to read N_r SDNs
+    if request.method == 'GET':
+        data = LinkVersion.get_multiple_data()
+        return jsonify({'link_versions': data})  # will return the json
+
 @app.route('/predict', methods=['POST'])
 def predict():
     if request.method == 'POST':
@@ -80,6 +91,42 @@ def predict():
         one_flow_pred = int(np.argmax(predictions_1flow, axis=-1))
 
         return str(one_flow_pred)
+
+def deunicodify_hook(pairs):
+    new_pairs = []
+    for key, value in pairs:
+        if isinstance(value, unicode):
+            value = value.encode('utf-8')
+        if isinstance(key, unicode):
+            key = key.encode('utf-8')
+        new_pairs.append((key, value))
+    return dict(new_pairs)
+
+
+@app.route('/write_full_data/',  methods=['GET', 'POST'])
+def write_full_data():
+  if request.method == 'POST':
+    content = request.data
+    data = json.loads(content,  object_pairs_hook=deunicodify_hook)
+    #   del data["_id"]
+    Full_Data.insert_n_data([data['link_versions']])
+    # print(data)
+    return content
+
+# Lay BW
+@app.route('/write_EndPoint/',  methods=['GET', 'POST'])
+def write_EndPoint():
+  if request.method == 'POST':
+    content = request.data
+    # print(json.loads(content)['EndPoint_datas'])
+    end_point = json.loads(content)['EndPoint_datas']
+    data_search = {
+        'srcLink': end_point['srcLink'], 'portInfo': end_point['portInfo']}
+    if EndPointModel.is_data_exit(end_point):
+        EndPointModel.update_many(data_search, end_point)
+    else:
+        EndPointModel.insert_data(end_point)
+    return content
 
 # fix cung R, W
 def ccdn():
