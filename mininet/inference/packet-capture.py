@@ -7,12 +7,12 @@ connection = pika.BlockingConnection(pika.ConnectionParameters(config.RABBIT_URL
 channel = connection.channel()
 channel.queue_declare(queue=config.CONSUMER_QUEUE)
 
-cmd = 'tshark -i any -Y "udp and gquic.payload" \
+cmd = 'tshark -i any -Y "gquic.payload" \
         -T fields \
         -e frame.time_epoch -e ip.src -e udp.srcport -e ip.dst -e udp.dstport -e ip.proto \
         -e _ws.col.Info -e gquic.payload \
         -E header=n -E separator=, -E quote=d -E occurrence=f \
-        -a duration:200'
+        -a duration:20000'
 
 def main():
     with open("packet-capture.log", "wb") as file:

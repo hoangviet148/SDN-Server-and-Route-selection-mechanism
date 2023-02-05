@@ -27,7 +27,7 @@ class ThreadedConsumer(threading.Thread):
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def predict(self, message):
-        model = tf.keras.models.load_model("/app/api/model/model.h5")
+        model = tf.keras.models.load_model("/app/api/pre_trained_model/model.h5")
         temp = next(iter(message.values()))
         list_of_lists = temp["data"]
         # Determine the maximum length of the lists
@@ -41,11 +41,12 @@ class ThreadedConsumer(threading.Thread):
 
         x_test = x_test.reshape(-1, 20, 128, 1)
         x_test = x_test / 255
-        # my_array.reshape(-1, 20, 128, 1)
-        #predictions_1flow = model.predict(my_array.reshape(-1, 20, 128, 1))
-        predictions_1flow = model.predict(x_test)
-        one_flow_pred = np.argmax(predictions_1flow, axis=-1)
-        print("=== one_flow_pred ===", one_flow_pred)
+        predictions = model.predict(x_test)
+        one_flow_pred = np.argmax(predictions, axis=-1)
+
+        label_dict ={'FileTransfer': 0, 'Music': 1, 'VoIP': 2, 'Youtube': 3}
+
+        print("=== flow_pred ===", one_flow_pred)
 
         return one_flow_pred
         # with open(f"{self.thread_id}.json", "w") as outfile:

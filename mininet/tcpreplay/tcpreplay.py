@@ -1,24 +1,32 @@
 from scapy.all import *
 import sys
+import subprocess
 
 CLIENT = sys.argv[1]
-print(CLIENT)
 SERVER = sys.argv[2]
-print(SERVER)
 
 CLIENT_IP = sys.argv[3]
-print(CLIENT_IP)
-
 CLIENT_MAC = sys.argv[4]
 
 SERVER_IP = sys.argv[5]
-print(CLIENT_MAC)
-
 SERVER_MAC = sys.argv[6]
 
-input_pcap_file = "./FileTransfer/FileTransfer_00001_20180328094056.pcap"
-output_pcap_file = "%s-%s.pcap" % (CLIENT, SERVER)
-print(output_pcap_file)
+SERVICE_NAME = sys.argv[7]
+
+input_pcap_file = "./%s/%s.pcap" % (SERVICE_NAME, SERVICE_NAME)
+output_pcap_file = "%s-%s-%s.pcap" % (CLIENT, SERVER, SERVICE_NAME)
+
+def replay():
+    print("start replay")
+    command = f"""
+    tcpreplay --intf1='{CLIENT}-eth0' {output_pcap_file}
+    """
+    subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+    print("End replay")
+
+if os.path.exists(output_pcap_file):
+    print("already rewrite")
+    replay()
 
 pairs = [
     {
@@ -35,6 +43,7 @@ pairs = [
     },
 ]
 
+print("Start rewrite ip")
 packets = rdpcap(input_pcap_file)
 for packet in packets:
     for item in pairs:
@@ -54,3 +63,6 @@ for packet in packets:
             # Change the destination IP addresses
             packet[IP].dst = item["new_ip"]
 wrpcap(output_pcap_file, packets)
+print("End rewrite ip")
+
+replay()
