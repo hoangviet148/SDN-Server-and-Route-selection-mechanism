@@ -46,8 +46,6 @@ import static org.onlab.util.Tools.nullIsNotFound;
 public class ApiDocResource extends AbstractInjectionResource {
 
     private static final String CONTENT_TYPE = "Content-Type";
-    private static final String CONTENT_SECURITY_POLICY = "Content-Security-Policy";
-    private static final String FRAME_ANCESTORS_NONE = "frame-ancestors 'none'";
     private static final String STYLESHEET = "text/css";
     private static final String SCRIPT = "text/javascript";
     private static final String DOCS = "/docs/";
@@ -142,8 +140,7 @@ public class ApiDocResource extends AbstractInjectionResource {
                                          stream(index, p1e, p2s)));
 
         return ok(new SequenceInputStream(streams))
-                .header(CONTENT_TYPE, TEXT_HTML)
-                .header(CONTENT_SECURITY_POLICY, FRAME_ANCESTORS_NONE).build();
+                .header(CONTENT_TYPE, TEXT_HTML).build();
     }
 
     private InputStream includeOptions(ApiDocService service) {

@@ -27,6 +27,16 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.Port;
 import org.onosproject.net.device.DeviceService;
 
+import static org.onosproject.k8snode.api.Constants.EXTERNAL_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.GENEVE_TUNNEL;
+import static org.onosproject.k8snode.api.Constants.GRE_TUNNEL;
+import static org.onosproject.k8snode.api.Constants.INTEGRATION_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.INTEGRATION_TO_EXTERNAL_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.INTEGRATION_TO_LOCAL_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.LOCAL_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.LOCAL_TO_INTEGRATION_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.PHYSICAL_EXTERNAL_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.VXLAN_TUNNEL;
 import static org.onosproject.net.AnnotationKeys.PORT_NAME;
 
 /**
@@ -61,68 +71,54 @@ public class K8sNodeCheckCommand extends AbstractShellCommand {
         if (intgBridge != null) {
             print("%s %s=%s available=%s %s",
                     deviceService.isAvailable(intgBridge.id()) ? MSG_OK : MSG_ERROR,
-                    node.intgBridgeName(),
+                    INTEGRATION_BRIDGE,
                     intgBridge.id(),
                     deviceService.isAvailable(intgBridge.id()),
                     intgBridge.annotations());
-            printPortState(deviceService, node.intgBridge(), node.intgBridgePortName());
-            printPortState(deviceService, node.intgBridge(), node.intgToExtPatchPortName());
-            printPortState(deviceService, node.intgBridge(), node.intgToLocalPatchPortName());
+            printPortState(deviceService, node.intgBridge(), INTEGRATION_BRIDGE);
+            printPortState(deviceService, node.intgBridge(), INTEGRATION_TO_EXTERNAL_BRIDGE);
+            printPortState(deviceService, node.intgBridge(), INTEGRATION_TO_LOCAL_BRIDGE);
+            if (node.dataIp() != null) {
+                printPortState(deviceService, node.intgBridge(), VXLAN_TUNNEL);
+                printPortState(deviceService, node.intgBridge(), GRE_TUNNEL);
+                printPortState(deviceService, node.intgBridge(), GENEVE_TUNNEL);
+            }
         } else {
             print("%s %s=%s is not available",
                     MSG_ERROR,
-                    node.intgBridgeName(),
+                    INTEGRATION_BRIDGE,
                     node.intgBridge());
         }
 
-        print("");
         print("[External Bridge Status]");
         Device extBridge = deviceService.getDevice(node.extBridge());
         if (extBridge != null) {
             print("%s %s=%s available=%s %s",
                     deviceService.isAvailable(extBridge.id()) ? MSG_OK : MSG_ERROR,
-                    node.extBridgeName(),
+                    EXTERNAL_BRIDGE,
                     extBridge.id(),
                     deviceService.isAvailable(extBridge.id()),
                     extBridge.annotations());
-            printPortState(deviceService, node.extBridge(), node.extToIntgPatchPortName());
+            printPortState(deviceService, node.extBridge(), EXTERNAL_BRIDGE);
+            printPortState(deviceService, node.extBridge(), PHYSICAL_EXTERNAL_BRIDGE);
         } else {
             print("%s %s=%s is not available",
                     MSG_ERROR,
-                    node.extBridgeName(),
+                    EXTERNAL_BRIDGE,
                     node.extBridge());
         }
 
-        print("");
         print("[Local Bridge Status]");
         Device localBridge = deviceService.getDevice(node.localBridge());
         if (localBridge != null) {
             print("%s %s=%s available=%s %s",
                     deviceService.isAvailable(localBridge.id()) ? MSG_OK : MSG_ERROR,
-                    node.localBridgeName(),
+                    LOCAL_BRIDGE,
                     localBridge.id(),
                     deviceService.isAvailable(localBridge.id()),
                     localBridge.annotations());
-            printPortState(deviceService, node.localBridge(), node.localToIntgPatchPortName());
-        }
-
-        print("");
-        print("[Tunnel Bridge Status]");
-        Device tunBridge = deviceService.getDevice(node.tunBridge());
-        if (tunBridge != null) {
-            print("%s %s=%s available=%s %s",
-                    deviceService.isAvailable(tunBridge.id()) ? MSG_OK : MSG_ERROR,
-                    node.tunBridgeName(),
-                    tunBridge.id(),
-                    deviceService.isAvailable(tunBridge.id()),
-                    tunBridge.annotations());
-            printPortState(deviceService, node.tunBridge(), node.tunToIntgPatchPortName());
-
-            if (node.dataIp() != null) {
-                printPortState(deviceService, node.tunBridge(), node.vxlanPortName());
-                printPortState(deviceService, node.tunBridge(), node.grePortName());
-                printPortState(deviceService, node.tunBridge(), node.genevePortName());
-            }
+            printPortState(deviceService, node.localBridge(), LOCAL_BRIDGE);
+            printPortState(deviceService, node.localBridge(), LOCAL_TO_INTEGRATION_BRIDGE);
         }
     }
 

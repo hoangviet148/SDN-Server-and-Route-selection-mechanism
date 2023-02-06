@@ -74,7 +74,7 @@ public class ComponentConfigManager implements ComponentConfigService {
     private final Logger log = getLogger(getClass());
 
     private final ComponentConfigStoreDelegate delegate = new InternalStoreDelegate();
-    private InternalAccumulator accumulator;
+    private final InternalAccumulator accumulator = new InternalAccumulator();
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ComponentConfigStore store;
@@ -89,17 +89,12 @@ public class ComponentConfigManager implements ComponentConfigService {
 
     @Activate
     public void activate() {
-        // Accumulator depends on SharedExecutors, we create a new one at each
-        // activation to avoid using executors that have been terminated, which
-        // can happen during core bundle refresh.
-        accumulator = new InternalAccumulator();
         store.setDelegate(delegate);
         log.info("Started");
     }
 
     @Deactivate
     public void deactivate() {
-        accumulator = null;
         store.unsetDelegate(delegate);
         log.info("Stopped");
     }

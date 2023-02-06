@@ -28,7 +28,6 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.onosproject.store.primitives.ConsistentMapBackedJavaMap;
 
@@ -44,8 +43,6 @@ public final class TestConsistentMap<K, V> extends ConsistentMapAdapter<K, V> {
     private final String mapName;
     private final AtomicLong counter = new AtomicLong(0);
     private final Serializer serializer;
-    private Map<K, V> javaMap;
-
 
     private TestConsistentMap(String mapName, Serializer serializer) {
         map = new ConcurrentHashMap<>();
@@ -199,7 +196,9 @@ public final class TestConsistentMap<K, V> extends ConsistentMapAdapter<K, V> {
 
     @Override
     public Collection<Versioned<V>> values() {
-        return map.values();
+        return map.values()
+                .stream()
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -279,11 +278,6 @@ public final class TestConsistentMap<K, V> extends ConsistentMapAdapter<K, V> {
     }
 
     @Override
-    public Stream<Map.Entry<K, Versioned<V>>> stream() {
-        return map.entrySet().stream();
-    }
-
-    @Override
     public void addListener(MapEventListener<K, V> listener) {
         listeners.add(listener);
     }
@@ -295,12 +289,7 @@ public final class TestConsistentMap<K, V> extends ConsistentMapAdapter<K, V> {
 
     @Override
     public Map<K, V> asJavaMap() {
-        synchronized (this) {
-            if (javaMap == null) {
-                javaMap = new ConsistentMapBackedJavaMap<>(this);
-            }
-        }
-        return javaMap;
+        return new ConsistentMapBackedJavaMap<>(this);
     }
 
     public static Builder builder() {

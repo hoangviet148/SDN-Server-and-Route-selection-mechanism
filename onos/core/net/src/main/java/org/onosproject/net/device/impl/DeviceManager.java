@@ -22,11 +22,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.Futures;
 import org.onlab.util.KryoNamespace;
 import org.onlab.util.Tools;
-import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
-import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.NodeId;
-import org.onosproject.mastership.MastershipAdminService;
 import org.onosproject.mastership.MastershipEvent;
 import org.onosproject.mastership.MastershipListener;
 import org.onosproject.mastership.MastershipService;
@@ -71,25 +68,21 @@ import org.onosproject.store.cluster.messaging.MessageSubject;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.Serializer;
 import org.onosproject.upgrade.UpgradeService;
-import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Deactivate;
 import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.component.annotations.Modified;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
 import java.time.Instant;
 import java.util.Collection;
-import java.util.Dictionary;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -97,24 +90,18 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.common.base.Strings.isNullOrEmpty;
 import static com.google.common.collect.Multimaps.newListMultimap;
 import static com.google.common.collect.Multimaps.synchronizedListMultimap;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
-import static java.lang.System.currentTimeMillis;
-import static org.onlab.util.Tools.get;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.net.MastershipRole.MASTER;
 import static org.onosproject.net.MastershipRole.NONE;
 import static org.onosproject.net.MastershipRole.STANDBY;
-import static org.onosproject.net.device.impl.OsgiPropertyConstants.ROLE_TIMEOUT_SECONDS;
-import static org.onosproject.net.device.impl.OsgiPropertyConstants.ROLE_TIMEOUT_SECONDS_DEFAULT;
 import static org.onosproject.security.AppGuard.checkPermission;
 import static org.onosproject.security.AppPermission.Type.DEVICE_READ;
 import static org.slf4j.LoggerFactory.getLogger;
@@ -124,10 +111,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  */
 @Component(immediate = true,
            service = {DeviceService.class, DeviceAdminService.class,
-                      DeviceProviderRegistry.class, PortConfigOperatorRegistry.class },
-           property = {
-                ROLE_TIMEOUT_SECONDS + ":Integer=" + ROLE_TIMEOUT_SECONDS_DEFAULT
-           })
+                      DeviceProviderRegistry.class, PortConfigOperatorRegistry.class })
 public class DeviceManager
         extends AbstractListenerProviderRegistry<DeviceEvent, DeviceListener, DeviceProvider, DeviceProviderService>
         implements DeviceService, DeviceAdminService, DeviceProviderRegistry, PortConfigOperatorRegistry {
@@ -160,9 +144,6 @@ public class DeviceManager
     protected MastershipService mastershipService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected MastershipAdminService mastershipAdminService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected MastershipTermService termService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
@@ -174,10 +155,7 @@ public class DeviceManager
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected ClusterCommunicationService communicationService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected ComponentConfigService cfgService;
-
-    private ExecutorService clusterRequestExecutor;
+    private ExecutorService portReqeustExecutor;
     /**
      * List of all registered PortConfigOperator.
      */
@@ -196,11 +174,6 @@ public class DeviceManager
 
     private static final MessageSubject PORT_UPDOWN_SUBJECT =
             new MessageSubject("port-updown-req");
-
-    private static final MessageSubject PROBE_SUBJECT =
-            new MessageSubject("probe-req");
-    private static final long PROBE_TIMEOUT_MILLIS = 5000;
-    private static final int PROBE_ATTEMPTS = 3;
 
     private static final Serializer SERIALIZER = Serializer.using(
             KryoNamespace.newBuilder()
@@ -225,26 +198,8 @@ public class DeviceManager
     private final Map<DeviceId, LocalStatus> deviceLocalStatus =
             Maps.newConcurrentMap();
 
-    // To remember whether or not the role was acknowledged by the device
-    private final Map<DeviceId, Long> roleToAcknowledge =
-            Maps.newConcurrentMap();
-    private ScheduledExecutorService backgroundRoleChecker;
-
-
-    /**
-     * Timeout for role acknowledgement check.
-     **/
-    protected int roleTimeoutSeconds = ROLE_TIMEOUT_SECONDS_DEFAULT;
-
-    // FIXME join this map with roleToAcknowledge and fix the back to back event issue here
-    private final Map<DeviceId, MastershipRole> lastAcknowledgedRole =
-            Maps.newConcurrentMap();
-
     @Activate
-    public void activate(ComponentContext context) {
-        cfgService.registerProperties(getClass());
-
-        modified(context);
+    public void activate() {
         portAnnotationOp = new PortAnnotationOperator(networkConfigService);
         deviceAnnotationOp = new DeviceAnnotationOperator(networkConfigService);
         portOpsIndex.put(PortAnnotationConfig.class, portAnnotationOp);
@@ -262,65 +217,30 @@ public class DeviceManager
             try {
                 mastershipCheck();
             } catch (Exception e) {
-                log.error("Exception thrown during mastership integrity check", e);
+                log.error("Exception thrown during integrity check", e);
             }
         }, 1, 1, TimeUnit.MINUTES);
 
-        clusterRequestExecutor = newSingleThreadExecutor();
+        portReqeustExecutor = newSingleThreadExecutor();
 
-        communicationService.addSubscriber(
+        communicationService.<InternalPortUpDownEvent>addSubscriber(
                 PORT_UPDOWN_SUBJECT,
                 SERIALIZER::decode,
                 this::handlePortRequest,
-                clusterRequestExecutor);
-
-        communicationService.addSubscriber(
-                PROBE_SUBJECT,
-                SERIALIZER::decode,
-                this::handleProbeRequest,
-                SERIALIZER::encode,
-                clusterRequestExecutor);
-
-        backgroundRoleChecker = newSingleThreadScheduledExecutor(
-                groupedThreads("onos/device", "manager-role", log));
-        backgroundRoleChecker.scheduleAtFixedRate(() -> {
-            try {
-                roleCheck();
-            } catch (Exception e) {
-                log.error("Exception thrown while verifying role acknowledgement from all devices", e);
-            }
-        }, 0, 10, TimeUnit.SECONDS);
+                portReqeustExecutor);
 
         log.info("Started");
     }
 
-    @Modified
-    public void modified(ComponentContext context) {
-        Dictionary<?, ?> properties = context != null ? context.getProperties() : new Properties();
-        String roleTimeoutSec = get(properties, ROLE_TIMEOUT_SECONDS);
-        int oldRoleTimeoutSeconds = roleTimeoutSeconds;
-        try {
-            roleTimeoutSeconds = isNullOrEmpty(roleTimeoutSec) ?
-                    oldRoleTimeoutSeconds : Integer.parseInt(roleTimeoutSec.trim());
-        } catch (NumberFormatException e) {
-            log.warn("Can't parse {}, setting the old value {}", roleTimeoutSec, oldRoleTimeoutSeconds, e);
-            roleTimeoutSeconds = oldRoleTimeoutSeconds;
-        }
-        log.info("Modified. Values = {}: {}",
-                ROLE_TIMEOUT_SECONDS, roleTimeoutSeconds);
-    }
-
     @Deactivate
-    public void deactivate(ComponentContext context) {
-        cfgService.unregisterProperties(getClass(), true);
+    public void deactivate() {
         backgroundService.shutdown();
         networkConfigService.removeListener(networkConfigListener);
         store.unsetDelegate(delegate);
         mastershipService.removeListener(mastershipListener);
         eventDispatcher.removeSink(DeviceEvent.class);
         communicationService.removeSubscriber(PORT_UPDOWN_SUBJECT);
-        clusterRequestExecutor.shutdown();
-        backgroundRoleChecker.shutdown();
+        portReqeustExecutor.shutdown();
         log.info("Stopped");
     }
 
@@ -442,32 +362,18 @@ public class DeviceManager
         return ls.dateTime.toEpochMilli();
     }
 
-    // Returns true if the grace period is still on
-    private boolean inGracePeriod(DeviceId deviceId) {
-        LocalStatus ls = deviceLocalStatus.get(deviceId);
-        if (ls == null) {
-            // This should not be possible, unless the device is removed
-            log.warn("Not found a recent local status for {}", deviceId);
-            return true;
-        }
-        DeviceProvider provider = getProvider(deviceId);
-        return ls.connected &&
-                (Instant.now().toEpochMilli() - ls.dateTime.toEpochMilli()) < provider.gracePeriod();
-    }
-
     // Check a device for control channel connectivity
     // and changes local-status appropriately.
-    private boolean isReachable(DeviceId deviceId, boolean inGracePeriod) {
+    private boolean isReachable(DeviceId deviceId) {
         if (deviceId == null) {
             return false;
         }
         DeviceProvider provider = getProvider(deviceId);
         if (provider != null) {
-            boolean reachable = probeReachability(deviceId);
+            boolean reachable = provider.isReachable(deviceId);
             if (reachable && !isLocallyConnected(deviceId)) {
                 deviceLocalStatus.put(deviceId, new LocalStatus(true, Instant.now()));
-            } else if (!reachable && isLocallyConnected(deviceId) && !inGracePeriod) {
-                // Do not update if the grace period is still on
+            } else if (!reachable && isLocallyConnected(deviceId)) {
                 deviceLocalStatus.put(deviceId, new LocalStatus(false, Instant.now()));
             }
             return reachable;
@@ -507,7 +413,7 @@ public class DeviceManager
     private void handlePortRequest(InternalPortUpDownEvent event) {
         DeviceId deviceId = event.deviceId();
         checkNotNull(deviceId, DEVICE_ID_NULL);
-        checkNotNull(event.portNumber(), PORT_NUMBER_NULL);
+        checkNotNull(deviceId, PORT_NUMBER_NULL);
         checkState(mastershipService.isLocalMaster(deviceId), EVENT_NON_MASTER);
         changePortStateAtMaster(event.deviceId(), event.portNumber(), event.isEnable());
     }
@@ -529,7 +435,7 @@ public class DeviceManager
     public void changePortState(DeviceId deviceId, PortNumber portNumber,
                                 boolean enable) {
         checkNotNull(deviceId, DEVICE_ID_NULL);
-        checkNotNull(portNumber, PORT_NUMBER_NULL);
+        checkNotNull(deviceId, PORT_NUMBER_NULL);
         NodeId masterId = mastershipService.getMasterFor(deviceId);
 
         if (masterId == null) {
@@ -571,122 +477,59 @@ public class DeviceManager
             final DeviceId deviceId = device.id();
             MastershipRole myRole = mastershipService.getLocalRole(deviceId);
             log.trace("Checking device {}. Current role is {}", deviceId, myRole);
-
-            log.debug("Device {} local status is {}", deviceId, localStatus(deviceId));
-            final boolean isGracePeriodOn = inGracePeriod(deviceId);
-            final boolean isReachable = isReachable(deviceId, isGracePeriodOn);
-            // Passed the grace period and it is still not reachable
-            if (!isGracePeriodOn && !isReachable) {
+            if (!isReachable(deviceId)) {
                 if (myRole != NONE) {
-                    // Verify if the device is fully disconnected from the cluster
-                    if (updateMastershipFor(deviceId) == null
-                            && myRole == MASTER && isAvailable(deviceId)) {
-                        log.info("Local Role {}, Marking unreachable device {} offline", MASTER, deviceId);
-                        // Following the deviceDisconnected method logic (line 734) we are marking also all the
-                        // ports as disabled.
-                        List<PortDescription> descs = store.getPortDescriptions(getProvider(deviceId).id(), deviceId)
-                                .map(desc -> ensurePortEnabledState(desc, false))
-                                .collect(Collectors.toList());
-                        store.updatePorts(getProvider(deviceId).id(), deviceId, descs);
-                        post(store.markOffline(deviceId));
+                    // can't be master if device is not reachable
+                    try {
+                        if (myRole == MASTER) {
+                            log.info("Local Role {}, Marking unreachable device {} offline", MASTER, deviceId);
+                            post(store.markOffline(deviceId));
+                        }
+                        //relinquish master role and ability to be backup.
+                        mastershipService.relinquishMastership(deviceId).get();
+                    } catch (InterruptedException e) {
+                        log.warn("Interrupted while relinquishing role for {}", deviceId);
+                        Thread.currentThread().interrupt();
+                    } catch (ExecutionException e) {
+                        log.error("Exception thrown while relinquishing role for {}", deviceId, e);
                     }
                 } else {
-                    // Firstly get a role and then check if the device is available in the store.
-                    // if it is, if this node is the master and the device is fully disconnected
-                    // from the cluster mark the device offline. In principle, this condition should
-                    // never be hit unless in a device removed phase for NONE mastership roles.
-                    try {
-                        mastershipService.requestRoleFor(deviceId).get();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        log.error("Interrupted waiting for Mastership", e);
-                    } catch (ExecutionException e) {
-                        log.error("Encountered an error waiting for Mastership", e);
-                    }
-
-                    MastershipTerm term = termService.getMastershipTerm(deviceId);
-                    if (updateMastershipFor(deviceId) == null &&
-                            term != null && localNodeId.equals(term.master()) &&
-                            isAvailable(deviceId)) {
-                        log.info("Marking unreachable device {} offline", deviceId);
-                        // Following the deviceDisconnected method logic (line 734) we are marking also all the
-                        // ports as disabled.
-                        List<PortDescription> descs = store.getPortDescriptions(getProvider(deviceId).id(), deviceId)
-                                .map(desc -> ensurePortEnabledState(desc, false))
-                                .collect(Collectors.toList());
-                        store.updatePorts(getProvider(deviceId).id(), deviceId, descs);
-                        post(store.markOffline(deviceId));
+                    // check if the device has master and is available to the store, if not, mark it offline
+                    // only the nodes which has mastership role can mark any device offline.
+                    // This condition should never be hit unless in a device removed phase for NONE mastership roles.
+                    NodeId master = mastershipService.getMasterFor(deviceId);
+                    if (master == null && isAvailable(deviceId)) {
+                        CompletableFuture<MastershipRole> roleFuture = mastershipService.requestRoleFor(deviceId);
+                        roleFuture.thenAccept(role -> {
+                            MastershipTerm term = termService.getMastershipTerm(deviceId);
+                            if (term != null && localNodeId.equals(term.master())) {
+                                log.info("Marking unreachable device {} offline", deviceId);
+                                post(store.markOffline(deviceId));
+                            } else {
+                                log.info("Failed marking {} offline. {}", deviceId, role);
+                            }
+                            mastershipService.relinquishMastership(deviceId);
+                        });
                     }
                 }
-                roleToAcknowledge.remove(deviceId);
-            } else if (isReachable) {
-                // If this node is the master, ensure the device is marked online.
-                if (myRole == MASTER && canMarkOnline(device)) {
-                    log.debug("Can mark online {}", deviceId);
-                    post(store.markOnline(deviceId));
-                }
-
-                log.debug("{} is reachable - reasserting the role", deviceId);
-
-                // Device is still reachable. It is useful for some protocols
-                // to reassert the role. Note: NONE triggers request to MastershipService
-                reassertRole(deviceId, myRole);
-            } else {
-                // Do not proceed furthermore if the grace period is still on
-                log.debug("Skipping mastership check for {}", deviceId);
-            }
-        }
-    }
-
-    /**
-     * Checks if all the devices have acknowledged the mastership role.
-     */
-    private void roleCheck() {
-        log.debug("Checking role");
-        for (Device device : getDevices()) {
-            final DeviceId deviceId = device.id();
-            MastershipRole myRole = mastershipService.getLocalRole(deviceId);
-            log.trace("Checking device {}. Current role is {}", deviceId, myRole);
-            final AtomicBoolean exists = new AtomicBoolean(false);
-            final Long ts = roleToAcknowledge.compute(deviceId, (key, value) -> {
-                if (value == null) {
-                    return null;
-                }
-                exists.set(true);
-                if (currentTimeMillis() - value < (roleTimeoutSeconds * 1000)) {
-                    return value;
-                }
-                return null;
-            });
-            // Nobody applied the role recently
-            if (!exists.get()) {
-                log.trace("Role was not applied or it has been acknowledged for device {}", deviceId);
                 continue;
             }
-            // Timeout still on
-            if (ts != null) {
-                log.debug("Timeout expires in {} ms", ((roleTimeoutSeconds * 1000) - currentTimeMillis() + ts));
-                continue;
-            }
-            if (myRole != MASTER) {
-                log.debug("Timeout is expired but current role is not MASTER ({}), nothing to do", myRole);
-                continue;
-            }
-            // Switch failed to acknowledge master role we asked for.
-            // Yield mastership to other instance
-            log.warn("Failed to assert role onto device {}. requested={}, no response",
-                    deviceId, myRole);
-            updateMastershipFor(deviceId);
-        }
-    }
 
-    PortDescription ensurePortEnabledState(PortDescription desc, boolean enabled) {
-        if (desc.isEnabled() != enabled) {
-            return DefaultPortDescription.builder(desc)
-                    .isEnabled(enabled)
-                    .build();
+            // If this node is the master, ensure the device is marked online.
+            if (myRole == MASTER && canMarkOnline(device)) {
+                post(store.markOnline(deviceId));
+            }
+
+            if (myRole != NONE) {
+                continue;
+            }
+
+            log.info("{} is reachable but did not have a valid role, reasserting", deviceId);
+
+            // isReachable but was not MASTER or STANDBY, get a role and apply
+            // Note: NONE triggers request to MastershipService
+            reassertRole(deviceId, NONE);
         }
-        return desc;
     }
 
     // Personalized device provider service issued to the supplied provider.
@@ -718,8 +561,6 @@ public class DeviceManager
                          deviceId, newRole);
                 return false;
             }
-            // Start the timer
-            roleToAcknowledge.put(deviceId, currentTimeMillis());
             provider.roleChanged(deviceId, newRole);
             // not triggering probe when triggered by provider service event
             return true;
@@ -773,59 +614,66 @@ public class DeviceManager
             }
         }
 
+        private PortDescription ensurePortEnabledState(PortDescription desc, boolean enabled) {
+            if (desc.isEnabled() != enabled) {
+                return DefaultPortDescription.builder(desc)
+                        .isEnabled(enabled)
+                        .build();
+            }
+            return desc;
+        }
+
         @Override
         public void deviceDisconnected(DeviceId deviceId) {
             checkNotNull(deviceId, DEVICE_ID_NULL);
             checkValidity();
-            // Update the local status
             deviceLocalStatus.put(deviceId, new LocalStatus(false, Instant.now()));
-            log.info("Device {} disconnected from this node: {}", deviceId,
-                     clusterService.getLocalNode().id());
+            log.info("Device {} disconnected from this node", deviceId);
 
-            // If none can reach the device, we will continue with the disconnection logic.
-            // If there is one instance that reported device is still reachable, we hand over
-            // the mastership to it if we are the current master, otherwise if we are a backup
-            // we demote ourselves to the bottom of the backups list
-            if (updateMastershipFor(deviceId) == null) {
-                log.info("Device {} is fully disconnected from the cluster", deviceId);
-                List<PortDescription> descs = store.getPortDescriptions(provider().id(), deviceId)
-                        .map(desc -> ensurePortEnabledState(desc, false))
-                        .collect(Collectors.toList());
-                store.updatePorts(this.provider().id(), deviceId, descs);
+            List<PortDescription> descs = store.getPortDescriptions(provider().id(), deviceId)
+                    .map(desc -> ensurePortEnabledState(desc, false))
+                    .collect(Collectors.toList());
 
-                try {
-                    if (mastershipService.isLocalMaster(deviceId)) {
+            store.updatePorts(this.provider().id(), deviceId, descs);
+            try {
+                if (mastershipService.isLocalMaster(deviceId)) {
+                    post(store.markOffline(deviceId));
+                }
+            } catch (IllegalStateException e) {
+                log.warn("Failed to mark {} offline", deviceId);
+                // only the MASTER should be marking off-line in normal cases,
+                // but if I was the last STANDBY connection, etc. and no one else
+                // was there to mark the device offline, this instance may need to
+                // temporarily request for Master Role and mark offline.
+
+                //there are times when this node will correctly have mastership, BUT
+                //that isn't reflected in the ClockManager before the device disconnects.
+                //we want to let go of the device anyways, so make sure this happens.
+
+                // FIXME: Store semantics leaking out as IllegalStateException.
+                //  Consider revising store API to handle this scenario.
+                CompletableFuture<MastershipRole> roleFuture = mastershipService.requestRoleFor(deviceId);
+                roleFuture.whenComplete((role, error) -> {
+                    MastershipTerm term = termService.getMastershipTerm(deviceId);
+                    // TODO: Move this type of check inside device clock manager, etc.
+                    if (term != null && localNodeId.equals(term.master())) {
+                        log.info("Retry marking {} offline", deviceId);
                         post(store.markOffline(deviceId));
+                    } else {
+                        log.info("Failed again marking {} offline. {}", deviceId, role);
                     }
-                } catch (IllegalStateException e) {
-                    log.warn("Failed to mark {} offline", deviceId);
-                    // only the MASTER should be marking off-line in normal cases,
-                    // but if I was the last STANDBY connection, etc. and no one else
-                    // was there to mark the device offline, this instance may need to
-                    // temporarily request for Master Role and mark offline.
-
-                    //there are times when this node will correctly have mastership, BUT
-                    //that isn't reflected in the ClockManager before the device disconnects.
-                    //we want to let go of the device anyways, so make sure this happens.
-
-                    // FIXME: Store semantics leaking out as IllegalStateException.
-                    //  Consider revising store API to handle this scenario.
-                    CompletableFuture<MastershipRole> roleFuture = mastershipService.requestRoleFor(deviceId);
-                    roleFuture.whenComplete((role, error) -> {
-                        MastershipTerm term = termService.getMastershipTerm(deviceId);
-                        // TODO: Move this type of check inside device clock manager, etc.
-                        if (term != null && localNodeId.equals(term.master())) {
-                            log.info("Retry marking {} offline", deviceId);
-                            post(store.markOffline(deviceId));
-                        } else {
-                            log.info("Failed again marking {} offline. {}", deviceId, role);
-                        }
-                    });
-                } finally {
-                    roleToAcknowledge.remove(deviceId);
+                });
+            } finally {
+                try {
+                    //relinquish master role and ability to be backup.
+                    mastershipService.relinquishMastership(deviceId).get();
+                } catch (InterruptedException e) {
+                    log.warn("Interrupted while reliquishing role for {}", deviceId);
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException e) {
+                    log.error("Exception thrown while relinquishing role for {}", deviceId, e);
                 }
             }
-
         }
 
         @Override
@@ -951,8 +799,7 @@ public class DeviceManager
             if (requested == null && response == null) {
                 // something was off with DeviceProvider, maybe check channel too?
                 log.warn("Failed to assert role onto Device {}", deviceId);
-                roleToAcknowledge.remove(deviceId);
-                updateMastershipFor(deviceId);
+                mastershipService.relinquishMastership(deviceId);
                 return;
             }
 
@@ -969,35 +816,24 @@ public class DeviceManager
 
             if (Objects.equals(requested, response)) {
                 if (Objects.equals(requested, expected)) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Role has been acknowledged for device {}", deviceId);
-                    } else if (!requested.equals(lastAcknowledgedRole.get(deviceId))) {
-                        log.info("Role has been acknowledged for device {}", deviceId);
-                    }
-                    // Update the last known role and stop the timer
-                    lastAcknowledgedRole.put(deviceId, requested);
-                    roleToAcknowledge.remove(deviceId);
+                    return;
                 } else {
                     log.warn("Role mismatch on {}. Set to {}, but store demands {}",
                              deviceId, response, expected);
                     // roleManager got the device to comply, but doesn't agree with
                     // the store; use the store's view, then try to reassert.
                     backgroundService.execute(() -> reassertRole(deviceId, expected));
+                    return;
                 }
             } else {
                 // we didn't get back what we asked for. Reelect someone else.
                 log.warn("Failed to assert role onto device {}. requested={}, response={}",
                          deviceId, requested, response);
                 if (requested == MastershipRole.MASTER) {
-                    // Stop the timer
-                    roleToAcknowledge.remove(deviceId);
-                    updateMastershipFor(deviceId);
-                } else if (requested ==  MastershipRole.STANDBY) {
-                    // For P4RT devices, the response role will be NONE when this node is expected to be STANDBY
-                    // but the stream channel is not opened correctly.
-                    // Calling reassertRole will trigger the mechanism in GeneralDeviceProvider that
-                    // attempts to re-establish the stream channel
-                    backgroundService.execute(() -> reassertRole(deviceId, expected));
+                    mastershipService.relinquishMastership(deviceId);
+                    // TODO: Shouldn't we be triggering event?
+                    //final Device device = getDevice(deviceId);
+                    //post(new DeviceEvent(DEVICE_MASTERSHIP_CHANGED, device));
                 }
             }
         }
@@ -1011,14 +847,6 @@ public class DeviceManager
             DeviceEvent event = store.updatePortStatistics(this.provider().id(),
                                                            deviceId, portStatistics);
             post(event);
-        }
-
-        @Override
-        public DeviceDescription getDeviceDescription(DeviceId deviceId) {
-            checkNotNull(deviceId, DEVICE_ID_NULL);
-            checkValidity();
-
-            return store.getDeviceDescription(provider().id(), deviceId);
         }
     }
 
@@ -1056,8 +884,6 @@ public class DeviceManager
             log.warn("Provider for {} was not found. Cannot apply role {}", deviceId, newRole);
             return false;
         }
-        // Start the timer
-        roleToAcknowledge.put(deviceId, currentTimeMillis());
         provider.roleChanged(deviceId, newRole);
 
         if (newRole.equals(MastershipRole.MASTER)) {
@@ -1066,16 +892,6 @@ public class DeviceManager
             provider.triggerProbe(deviceId);
         }
         return true;
-    }
-
-    private boolean probeReachability(DeviceId deviceId) {
-        DeviceProvider provider = getProvider(deviceId);
-        if (provider == null) {
-            log.warn("Provider for {} was not found. Cannot probe reachability", deviceId);
-            return false;
-        }
-        return provider.isReachable(deviceId) && Tools.futureGetOrElse(provider.probeReachability(deviceId),
-                PROBE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS, Boolean.FALSE);
     }
 
     /**
@@ -1117,7 +933,7 @@ public class DeviceManager
                 if (!applyRoleAndProbe(did, MASTER)) {
                     log.warn("Unsuccessful applying role {} to {}", myNextRole, did);
                     // immediately failed to apply role
-                    updateMastershipFor(did);
+                    mastershipService.relinquishMastership(did);
                     // FIXME disconnect?
                 }
                 break;
@@ -1126,7 +942,7 @@ public class DeviceManager
                 if (!applyRoleAndProbe(did, STANDBY)) {
                     log.warn("Unsuccessful applying role {} to {}", myNextRole, did);
                     // immediately failed to apply role
-                    updateMastershipFor(did);
+                    mastershipService.relinquishMastership(did);
                     // FIXME disconnect?
                 }
                 break;
@@ -1140,10 +956,13 @@ public class DeviceManager
     }
 
     private void handleMastershipEvent(MastershipEvent event) {
-        log.debug("Handling mastership event");
+        if (event.type() == MastershipEvent.Type.BACKUPS_CHANGED) {
+            // Don't care if backup list changed.
+            return;
+        }
         final DeviceId did = event.subject();
 
-        // myNextRole suggested by MastershipService event
+        // myRole suggested by MastershipService
         MastershipRole myNextRole;
         if (event.type() == MastershipEvent.Type.SUSPENDED) {
             myNextRole = NONE; // FIXME STANDBY OR NONE?
@@ -1162,52 +981,29 @@ public class DeviceManager
             myNextRole = NONE;
         }
 
-        log.debug("Device {} local status is {}", did, localStatus(did));
-        final boolean isGracePeriodOn = inGracePeriod(did);
-        final boolean isReachable = isReachable(did, isGracePeriodOn);
-        // Passed the grace period and it is still not reachable
-        if (!isGracePeriodOn && !isReachable) {
-            // device is not connected to this node, nevertheless we should get a role
+        final boolean isReachable = isReachable(did);
+        if (!isReachable) {
+            // device is not connected to this node
             if (mastershipService.getLocalRole(did) == NONE) {
                 log.debug("Node was instructed to be {} role for {}, "
                                   + "but this node cannot reach the device "
-                                  + "and role is already None. Asking a new role "
-                                  + "and then apply the disconnection protocol.",
+                                  + "and role is already None. Ignoring request.",
                           myNextRole, did);
-                try {
-                    mastershipService.requestRoleFor(did).get();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.error("Interrupted waiting for Mastership", e);
-                } catch (ExecutionException e) {
-                    log.error("Encountered an error waiting for Mastership", e);
-                }
             } else if (myNextRole != NONE) {
                 log.warn("Node was instructed to be {} role for {}, "
-                                 + "but this node cannot reach the device. "
-                                 + "Apply the disconnection protocol.",
+                                 + "but this node cannot reach the device.  "
+                                 + "Relinquishing role.  ",
                          myNextRole, did);
+                mastershipService.relinquishMastership(did);
             }
-            // Let's put some order in the candidates list
-            roleToAcknowledge.remove(did);
-            updateMastershipFor(did);
-        } else if (isReachable) {
-            // Device is connected to this node - always reassert the role.
-            // Ideally, protocols like OpenFlow would not need to reassert the
-            // role because the instances are only identified by the role. However,
-            // other protocols like P4RT require to provide also an election id
-            // which maybe different over time, by reasserting the role will guarantee
-            // that updated election ids are communicated to the devices. It should not
-            // cost us a lot as it is equivalent to a probe.
-            if (store.getDevice(did) != null) {
-                log.info("{} is reachable - reasserting the role", did);
-                reassertRole(did, myNextRole);
-            } else {
-                log.debug("Device is not yet/no longer in the store: {}", did);
-            }
+            return;
+        }
+
+        // device is connected to this node:
+        if (store.getDevice(did) != null) {
+            reassertRole(did, myNextRole);
         } else {
-            // Do not proceed furthermore if the grace period is still on
-            log.debug("Skipping mastership event {}", event);
+            log.debug("Device is not yet/no longer in the store: {}", did);
         }
     }
 
@@ -1235,7 +1031,6 @@ public class DeviceManager
                 // When device is administratively removed, force disconnect.
                 DeviceId deviceId = event.subject().id();
                 deviceLocalStatus.remove(deviceId);
-                lastAcknowledgedRole.remove(deviceId);
 
                 DeviceProvider provider = getProvider(deviceId);
                 if (provider != null) {
@@ -1479,81 +1274,6 @@ public class DeviceManager
             work = portOp.combine(cpt, work, prevConfig);
         }
         return portAnnotationOp.combine(cpt, work, prevConfig);
-    }
-
-    /**
-     * Handler for remote probe requests.
-     *
-     * @param deviceId the device to check
-     * @return whether or not the device is reachable
-     */
-    private boolean handleProbeRequest(DeviceId deviceId) {
-        int attempt = 0;
-        // Let's do a number of attempts
-        while (attempt < PROBE_ATTEMPTS) {
-            if (!probeReachability(deviceId)) {
-                return false;
-            }
-            attempt++;
-        }
-        return true;
-    }
-
-    /**
-     * Update the mastership for this device. If there is a node able
-     * to reach the device and this node is the master move the
-     * mastership to the next node still connected to this device.
-     * If the current node is a backup, it demotes itself to the bottom
-     * of the candidates list
-     *
-     * @param deviceId the device for which we have to update the mastership
-     * @return the NodeId of any node that can reach the device, or null if
-     * none of the ONOS instances can reach the device
-     */
-    private NodeId updateMastershipFor(DeviceId deviceId) {
-        Map<NodeId, CompletableFuture<Boolean>> probes = Maps.newHashMap();
-        // Request a probe only if the node is ready
-        for (ControllerNode onosNode : clusterService.getNodes()) {
-            if (!clusterService.getState(onosNode.id()).isReady() || localNodeId.equals(onosNode.id())) {
-                continue;
-            }
-            probes.put(onosNode.id(), communicationService.sendAndReceive(deviceId, PROBE_SUBJECT, SERIALIZER::encode,
-                    SERIALIZER::decode, onosNode.id()));
-        }
-
-        // Returns the first node able to reach the device
-        // FIXME [SDFAB-935] optimize by looking at the MastershipInfo
-        boolean isReachable;
-        NodeId nextMaster = null;
-        // FIXME Should we expose timeout? Understand if there is need to signal to the caller
-        for (Map.Entry<NodeId, CompletableFuture<Boolean>> probe : probes.entrySet()) {
-            isReachable = Tools.futureGetOrElse(probe.getValue(), PROBE_TIMEOUT_MILLIS,
-                    TimeUnit.MILLISECONDS, Boolean.FALSE);
-            if (isReachable) {
-                nextMaster = probe.getKey();
-            }
-        }
-
-        // FIXME [SDFAB-935] optimize demote by looking at the MastershipInfo;
-        if (nextMaster != null) {
-            log.info("Device {} is still connected to {}", deviceId, nextMaster);
-            MastershipRole myRole = mastershipService.getLocalRole(deviceId);
-            if (myRole == MASTER) {
-                log.info("Handing over the mastership of {} to next master {}", deviceId, nextMaster);
-                mastershipAdminService.setRole(nextMaster, deviceId, MASTER);
-                // Do not demote here because setRole can return before the mastership has been passed.
-                // Current implementation promotes first the nextMaster as top of candidate list and then
-                // transfer the leadership. We can use the BACKUP events to do demote or leverage periodic
-                // checks.
-            } else if (myRole == STANDBY) {
-                log.info("Demote current instance to the bottom of the candidates list for {}", deviceId);
-                mastershipAdminService.demote(localNodeId, deviceId);
-            } else {
-                log.debug("No valid role for {}", deviceId);
-            }
-        }
-
-        return nextMaster;
     }
 
     /**

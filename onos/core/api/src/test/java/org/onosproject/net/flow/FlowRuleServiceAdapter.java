@@ -29,11 +29,6 @@ public class FlowRuleServiceAdapter implements FlowRuleService {
     }
 
     @Override
-    public FlowEntry getFlowEntry(FlowRule rule) {
-        return null;
-    }
-
-    @Override
     public Iterable<FlowEntry> getFlowEntries(DeviceId deviceId) {
         return null;
     }
@@ -43,11 +38,7 @@ public class FlowRuleServiceAdapter implements FlowRuleService {
     }
 
     @Override
-    public void purgeFlowRules(DeviceId deviceId) {
-    }
-
-    @Override
-    public void purgeFlowRules(DeviceId deviceId, ApplicationId appId) {
+    public void purgeFlowRules(DeviceId deviceId){
     }
 
     @Override

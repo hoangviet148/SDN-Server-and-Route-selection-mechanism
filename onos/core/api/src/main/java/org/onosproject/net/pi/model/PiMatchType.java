@@ -42,10 +42,5 @@ public enum PiMatchType {
     /**
      * Range match type.
      */
-    RANGE,
-
-    /**
-     * Optional match type.
-     */
-    OPTIONAL
+    RANGE
 }

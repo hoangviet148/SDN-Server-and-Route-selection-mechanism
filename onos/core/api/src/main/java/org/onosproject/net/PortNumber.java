@@ -232,15 +232,6 @@ public final class PortNumber {
             // enum name
             return logical.toString();
         }
-        return String.format("%s", UnsignedLongs.toString(number));
-    }
-
-    private String decodeLogicalPortExtended() {
-        Logical logical = LOGICAL.get().get(number);
-        if (logical != null) {
-            // enum name
-            return logical.toString();
-        }
         return String.format("UNKNOWN(%s)", UnsignedLongs.toString(number));
     }
 
@@ -259,7 +250,7 @@ public final class PortNumber {
     @Override
     public String toString() {
         if (isLogical()) {
-            return decodeLogicalPortExtended();
+            return decodeLogicalPort();
         } else if (hasName()) {
             // named port
             if (number == NO_DISPLAY_NUMBER) {
@@ -273,25 +264,9 @@ public final class PortNumber {
         }
     }
 
-    // toString method that does not use the name.
-    // if it is a logical port will use either the enum or the number
-    // else if it has a name returns just the number
-    // else it does not have a name, it returns the number because name == number
-    public String toStringWithoutName() {
-        if (isLogical()) {
-            return decodeLogicalPort();
-        }
-        // Either named port or port without name
-        return UnsignedLongs.toString(number);
-    }
-
     @Override
     public int hashCode() {
         return Long.hashCode(number);
-    }
-
-    public int hashCodeExtended() {
-        return Objects.hashCode(number, hasName() ? name : 0);
     }
 
     @Override

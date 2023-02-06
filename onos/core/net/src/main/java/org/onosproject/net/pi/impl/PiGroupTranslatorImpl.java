@@ -94,18 +94,6 @@ final class PiGroupTranslatorImpl {
                     actionProfileId));
         }
 
-        // Check if the table associated with the action profile supports only
-        // one-shot action profile programming.
-        boolean isTableOneShot = actionProfileModel.tables().stream()
-                .map(tableId -> pipeconf.pipelineModel().table(tableId))
-                .allMatch(piTableModel -> piTableModel.isPresent() &&
-                        piTableModel.get().oneShotOnly());
-        if (isTableOneShot) {
-            throw new PiTranslationException(format(
-                    "Table associated to action profile '%s' supports only one-shot action profile programming",
-                    actionProfileId));
-        }
-
         // Check group validity.
         if (actionProfileModel.maxGroupSize() > 0
                 && group.buckets().buckets().size() > actionProfileModel.maxGroupSize()) {
@@ -173,10 +161,7 @@ final class PiGroupTranslatorImpl {
                     .withAction((PiAction) tableAction)
                     .build();
 
-            // NOTE Indirect groups have weight set to -1 which is not supported
-            // by P4RT - setting to 1 to avoid problems with the p4rt server.
-            final int weight = group.type() == GroupDescription.Type.INDIRECT ? 1 : bucket.weight();
-            piActionGroupBuilder.addMember(member, weight);
+            piActionGroupBuilder.addMember(member, bucket.weight());
         }
 
         return piActionGroupBuilder.build();

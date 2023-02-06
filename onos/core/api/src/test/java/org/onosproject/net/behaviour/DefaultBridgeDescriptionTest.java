@@ -24,9 +24,7 @@ import org.onosproject.net.DeviceId;
 import java.util.List;
 
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 /**
  * Unit tests for DefaultBridgeDescription.
@@ -60,7 +58,6 @@ public class DefaultBridgeDescriptionTest {
         build.datapathType(type);
         build.failMode(mode);
         build.disableInBand();
-        build.mcastSnoopingEnable();
         build.enableLocalController();
         BridgeDescription test;
         test = build.build();
@@ -71,7 +68,6 @@ public class DefaultBridgeDescriptionTest {
         assertThat(test.datapathType().get(), is(type));
         assertThat(test.failMode().get(), is(mode));
         assertThat(test.disableInBand().get(), is(true));
-        assertThat(test.mcastSnoopingEnable().get(), is(true));
         assertNull(test.annotations());
         assertTrue(test.enableLocalController());
         assertThat(test.deviceId().get(), is(DeviceId.deviceId("of:" + id)));

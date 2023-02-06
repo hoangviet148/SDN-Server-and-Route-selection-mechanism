@@ -20,8 +20,6 @@ profiles([
     "minimal",
     "seba",
     "stratum",
-    "sdfabric",
-    "sona",
 ])
 
 filegroup(
@@ -35,8 +33,6 @@ filegroup(
         ":minimal_profile": extensions("minimal") + apps("minimal"),
         ":seba_profile": extensions("seba") + apps("seba"),
         ":stratum_profile": extensions("stratum") + apps("stratum"),
-        ":sdfabric_profile": extensions("sdfabric") + apps("sdfabric"),
-        ":sona_profile": extensions("sona") + apps("sona"),
         "//conditions:default": extensions() + apps(),
     }),
     visibility = ["//visibility:public"],
@@ -46,15 +42,12 @@ KARAF = "@apache_karaf//:apache_karaf"
 
 BRANDING = "//tools/package/branding:onos-tools-package-branding"
 
-LOG4J_EXTRA = "//tools/package/log4j2-extra:onos-log4j2-extra"
-
 # Generates auxiliary karaf.zip file; branded and augmented with ONOS runtime tools
 genrule(
     name = "onos-karaf",
     srcs = [
         KARAF,
         BRANDING,
-        LOG4J_EXTRA,
     ] + glob([
         "tools/package/bin/*",
         "tools/package/etc/*",
@@ -62,8 +55,8 @@ genrule(
         "tools/package/runtime/bin/*",
     ]),
     outs = ["karaf.zip"],
-    cmd = "$(location tools/package/onos-prep-karaf) $(location karaf.zip) $(location %s) %s $(location %s) '' $(location %s) tools/package" %
-          (KARAF, ONOS_VERSION, BRANDING, LOG4J_EXTRA),
+    cmd = "$(location tools/package/onos-prep-karaf) $(location karaf.zip) $(location %s) %s $(location %s) '' tools/package" %
+          (KARAF, ONOS_VERSION, BRANDING),
     tools = ["tools/package/onos-prep-karaf"],
 )
 
@@ -77,8 +70,6 @@ genrule(
         ":minimal_profile": apps("minimal"),
         ":seba_profile": apps("seba"),
         ":stratum_profile": apps("stratum"),
-        ":sdfabric_profile": apps("sdfabric"),
-        ":sona_profile": apps("sona"),
         "//conditions:default": apps(),
     }),
     outs = ["onos.tar.gz"],
@@ -184,11 +175,6 @@ buildifier(
         "./web/gui2/node_modules/@angular/bazel/src/esm5.bzl",
         "./web/gui2/node_modules/@bazel/typescript/internal/common/tsconfig.bzl",
         "./web/gui2/node_modules/@bazel/typescript/internal/common/compilation.bzl",
-        "./web/gui2/node_modules/@bazel/rollup/rollup_bundle.bzl",
-        "./web/gui2/node_modules/@bazel/typescript/internal/ts_project.bzl",
-        "./web/gui2/node_modules/@bazel/typescript/internal/build_defs.bzl",
-        "./web/gui2/node_modules/@bazel/protractor/protractor_web_test.bzl",
-        "./web/gui2/node_modules/@bazel/typescript/third_party/github.com/bazelbuild/bazel/src/main/protobuf/BUILD.bazel",
     ],
     mode = "check",
 )
@@ -200,10 +186,6 @@ buildifier(
         "./web/gui2/node_modules/@angular/bazel/src/esm5.bzl",
         "./web/gui2/node_modules/@bazel/typescript/internal/common/tsconfig.bzl",
         "./web/gui2/node_modules/@bazel/typescript/internal/common/compilation.bzl",
-        "./web/gui2/node_modules/@bazel/typescript/internal/ts_project.bzl",
-        "./web/gui2/node_modules/@bazel/typescript/internal/build_defs.bzl",
-        "./web/gui2/node_modules/@bazel/protractor/protractor_web_test.bzl",
-        "./web/gui2/node_modules/@bazel/typescript/third_party/github.com/bazelbuild/bazel/src/main/protobuf/BUILD.bazel",
     ],
     mode = "fix",
 )

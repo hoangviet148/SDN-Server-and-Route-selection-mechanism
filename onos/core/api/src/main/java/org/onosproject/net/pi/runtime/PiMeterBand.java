@@ -27,30 +27,18 @@ import static com.google.common.base.MoreObjects.toStringHelper;
  */
 @Beta
 public final class PiMeterBand {
-    private final PiMeterBandType type;
     private final long rate;
     private final long burst;
 
     /**
      * Creates a band with rate and burst.
      *
-     * @param type type of this band
      * @param rate  rate of this band
      * @param burst burst of this band
      */
-    public PiMeterBand(PiMeterBandType type, long rate, long burst) {
-        this.type = type;
+    public PiMeterBand(long rate, long burst) {
         this.rate = rate;
         this.burst = burst;
-    }
-
-    /**
-     * Returns the type of this band.
-     *
-     * @return type of this band
-     */
-    public PiMeterBandType type() {
-        return type;
     }
 
     /**
@@ -73,7 +61,7 @@ public final class PiMeterBand {
 
     @Override
     public int hashCode() {
-        return Objects.hash(type, rate, burst);
+        return Objects.hash(rate, burst);
     }
 
     @Override
@@ -83,8 +71,7 @@ public final class PiMeterBand {
         }
         if (obj instanceof PiMeterBand) {
             PiMeterBand that = (PiMeterBand) obj;
-            return Objects.equals(type, that.type) &&
-                    Objects.equals(rate, that.rate) &&
+            return Objects.equals(rate, that.rate) &&
                     Objects.equals(burst, that.burst);
 
         }
@@ -93,7 +80,6 @@ public final class PiMeterBand {
 
     public String toString() {
         return toStringHelper(this)
-                .add("type", type)
                 .add("rate", rate)
                 .add("burst", burst).toString();
     }

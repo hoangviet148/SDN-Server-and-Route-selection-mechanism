@@ -134,11 +134,6 @@ public class VirtualNetworkFlowRuleManager
     }
 
     @Override
-    public FlowEntry getFlowEntry(FlowRule flowRule) {
-        return store.getFlowEntry(networkId(), flowRule);
-    }
-
-    @Override
     public Iterable<FlowEntry> getFlowEntries(DeviceId deviceId) {
         return store.getFlowEntries(networkId(), deviceId);
     }

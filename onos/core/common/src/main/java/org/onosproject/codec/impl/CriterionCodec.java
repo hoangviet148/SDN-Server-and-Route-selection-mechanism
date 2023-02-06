@@ -82,7 +82,6 @@ public final class CriterionCodec extends JsonCodec<Criterion> {
     static final String PI_MATCH_MASK = "mask";
     static final String PI_MATCH_HIGH_VALUE = "highValue";
     static final String PI_MATCH_LOW_VALUE = "lowValue";
-    static final String EXTENSION = "extension";
 
     @Override
     public ObjectNode encode(Criterion criterion, CodecContext context) {

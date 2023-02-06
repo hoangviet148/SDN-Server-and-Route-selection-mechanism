@@ -71,7 +71,7 @@
         linkNums = [], // array of link number labels
         devIconDim = 36, // node target dimension
         devIconDimMin = 20, // node minimum dimension when zoomed out
-        devIconDimMax = 70, // node maximum dimension when zoomed in
+        devIconDimMax = 40, // node maximum dimension when zoomed in
         portLabelDim = 30;
 
     // SVG elements;
@@ -107,7 +107,6 @@
         },
     };
 
-    var hostScaleFactor = {icon: 1.0, text: 1.0};
 
     // ==========================
     // === EVENT HANDLERS
@@ -217,9 +216,7 @@
             };
             model.links.push(linkData);
 
-            // Make cell-phone devices default to wireless; others have to be annotated explicitly
-            var cType = model.type === 'cellPhone' ? "wireless" : model.connectionType
-            var lnk = tms.createHostLink(model.id, cp.device, cp.port, cType);
+            var lnk = tms.createHostLink(model.id, cp.device, cp.port);
             if (lnk) {
                 network.links.push(lnk);
                 lu[linkData.key] = lnk;
@@ -365,7 +362,6 @@
         var th = ts.theme(),
             el = ldata.el,
             type = ldata.type(),
-            connectionType = ldata.connectionType,
             lw = ldata.linkWidth(),
             online = ldata.online(),
             modeCls = ldata.expected() ? 'inactive' : 'not-permitted',
@@ -385,19 +381,10 @@
             if (type) {
                 el.classed(type, true);
             }
-
-            if (connectionType === 'wireless') {
-                el.transition()
-                    .duration(delay)
-                    .attr('stroke-width', linkScale(lw))
-                    .attr('stroke', linkConfig[th].baseColor)
-                    .attr('stroke-dasharray', '3 6');
-            } else {
-                el.transition()
-                    .duration(delay)
-                    .attr('stroke-width', linkScale(lw))
-                    .attr('stroke', linkConfig[th].baseColor);
-            }
+            el.transition()
+                .duration(delay)
+                .attr('stroke-width', linkScale(lw))
+                .attr('stroke', linkConfig[th].baseColor);
         }
     }
 
@@ -563,10 +550,6 @@
         });
     }
 
-    function cycleLinkLabels() {
-        td3.toggleLinkLabels();
-    }
-
     function unpin() {
         var hov = tss.hovered();
         if (hov) {
@@ -643,8 +626,8 @@
         $timeout(updateLinks, 2000);
     }
 
-    function deviceScale(scaleFactor) {
-        var scale = uplink.zoomer().scale() * scaleFactor,
+    function deviceScale() {
+        var scale = uplink.zoomer().scale(),
             dim = devIconDim,
             multiplier = 1;
 
@@ -657,54 +640,37 @@
         return multiplier;
     }
 
-    function linkWidthScale() {
+    function linkWidthScale(scale) {
         var scale = uplink.zoomer().scale();
         return linkScale(widthRatio) / scale;
     }
 
-    function portLabelScale() {
+    function portLabelScale(scale) {
         var scale = uplink.zoomer().scale();
         return portLabelDim / (portLabelDim * scale);
     }
 
-    function adjustNodeScale() {
+    function setNodeScale(scale) {
         // Scale the network nodes
         _.each(network.nodes, function (node) {
             if (node.class === 'host') {
-                node.el.selectAll('g').style('transform', 'scale(' + deviceScale(hostScaleFactor.icon) + ')');
-                node.el.selectAll('text').style('transform', 'scale(' + deviceScale(hostScaleFactor.text) + ')');
+                node.el.selectAll('g').style('transform', 'scale(' + deviceScale(scale) + ')');
+                node.el.selectAll('text').style('transform', 'scale(' + deviceScale(scale) + ')');
                 return;
             }
-            node.el.selectAll('*').style('transform', 'scale(' + deviceScale(1.0) + ')');
+            node.el.selectAll('*')
+                .style('transform', 'scale(' + deviceScale(scale) + ')');
         });
 
         // Scale the network links
         _.each(network.links, function (link) {
-            link.el.style('stroke-width', linkWidthScale() + 'px');
+            link.el.style('stroke-width', linkWidthScale(scale) + 'px');
         });
 
         d3.select('#topo-portLabels')
             .selectAll('.portLabel')
             .selectAll('*')
-            .style('transform', 'scale(' + portLabelScale() + ')');
-    }
-
-
-    function toggleScale(scale) {
-        if (scale < 0.5) {
-            return 1.0
-        }
-        return scale - 0.2;
-    }
-
-    function toggleHostTextSize() {
-        hostScaleFactor.text = toggleScale(hostScaleFactor.text);
-        adjustNodeScale();
-    }
-
-    function toggleHostIconSize() {
-         hostScaleFactor.icon = toggleScale(hostScaleFactor.icon);
-         adjustNodeScale();
+            .style('transform', 'scale(' + portLabelScale(scale) + ')');
     }
 
     function resetAllLocations() {
@@ -1023,7 +989,6 @@
 
     function clearLinkTrafficStyle() {
         link.style('stroke-width', null)
-            .style('stroke', null)
             .classed(allTrafficClasses, false);
     }
 
@@ -1320,14 +1285,10 @@
                 toggleOffline: toggleOffline,
                 cycleDeviceLabels: cycleDeviceLabels,
                 cycleHostLabels: cycleHostLabels,
-                cycleLinkLabels: cycleLinkLabels,
                 unpin: unpin,
                 showMastership: showMastership,
                 showBadLinks: showBadLinks,
-                adjustNodeScale: adjustNodeScale,
-
-                toggleHostTextSize: toggleHostTextSize,
-                toggleHostIconSize: toggleHostIconSize,
+                setNodeScale: setNodeScale,
 
                 resetAllLocations: resetAllLocations,
                 addDevice: addDevice,

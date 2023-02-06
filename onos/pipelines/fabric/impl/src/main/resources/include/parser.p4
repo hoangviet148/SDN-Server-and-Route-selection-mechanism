@@ -28,28 +28,13 @@ parser FabricParser (packet_in packet,
 
     state start {
         transition select(standard_metadata.ingress_port) {
-            CPU_PORT: check_packet_out;
+            CPU_PORT: parse_packet_out;
             default: parse_ethernet;
         }
     }
 
-    state check_packet_out {
-        packet_out_header_t tmp = packet.lookahead<packet_out_header_t>();
-        transition select(tmp.do_forwarding) {
-            0: parse_packet_out_and_accept;
-            default: strip_packet_out;
-        }
-    }
-
-    state parse_packet_out_and_accept {
-        // Will transmit over requested egress port as-is. No need to parse further.
+    state parse_packet_out {
         packet.extract(hdr.packet_out);
-        transition accept;
-    }
-
-    state strip_packet_out {
-        // Remove packet-out header and process as a regular packet.
-        packet.advance(PACKET_OUT_HDR_SIZE * 8);
         transition parse_ethernet;
     }
 
@@ -181,10 +166,10 @@ parser FabricParser (packet_in packet,
         packet.extract(hdr.udp);
         fabric_metadata.l4_sport = hdr.udp.sport;
         fabric_metadata.l4_dport = hdr.udp.dport;
-        gtpu_t gtpu = packet.lookahead<gtpu_t>();
-        transition select(hdr.udp.dport, gtpu.version, gtpu.msgtype) {
-        // Treat GTP control traffic as payload.
-        (UDP_PORT_GTPU, GTP_V1, GTP_GPDU): parse_gtpu;
+        transition select(hdr.udp.dport) {
+#ifdef WITH_SPGW
+            UDP_PORT_GTPU: parse_gtpu;
+#endif // WITH_SPGW
 #ifdef WITH_INT
             default: parse_int;
 #else
@@ -198,51 +183,27 @@ parser FabricParser (packet_in packet,
         transition accept;
     }
 
+#ifdef WITH_SPGW
     state parse_gtpu {
         packet.extract(hdr.gtpu);
-        transition select(hdr.gtpu.ex_flag, hdr.gtpu.seq_flag, hdr.gtpu.npdu_flag) {
-            (0, 0, 0): parse_inner_ipv4;
-            default: parse_gtpu_options;
-        }
-    }
-
-    state parse_gtpu_options {
-        packet.extract(hdr.gtpu_options);
-        bit<8> gtpu_ext_len = packet.lookahead<bit<8>>();
-        transition select(hdr.gtpu_options.next_ext, gtpu_ext_len) {
-            (GTPU_NEXT_EXT_PSC, GTPU_EXT_PSC_LEN): parse_gtpu_ext_psc;
-            default: accept;
-        }
-    }
-
-    state parse_gtpu_ext_psc {
-        packet.extract(hdr.gtpu_ext_psc);
-#ifdef WITH_SPGW
-        fabric_metadata.spgw.qfi = hdr.gtpu_ext_psc.qfi;
-#endif // WITH_SPGW
-        transition select(hdr.gtpu_ext_psc.next_ext) {
-            GTPU_NEXT_EXT_NONE: parse_inner_ipv4;
-            default: accept;
-        }
+        transition parse_inner_ipv4;
     }
 
     state parse_inner_ipv4 {
         packet.extract(hdr.inner_ipv4);
         last_ipv4_dscp = hdr.inner_ipv4.dscp;
         transition select(hdr.inner_ipv4.protocol) {
-            PROTO_TCP: parse_inner_tcp;
+            PROTO_TCP: parse_tcp;
             PROTO_UDP: parse_inner_udp;
-            PROTO_ICMP: parse_inner_icmp;
+            PROTO_ICMP: parse_icmp;
             default: accept;
         }
     }
 
     state parse_inner_udp {
         packet.extract(hdr.inner_udp);
-#ifdef WITH_SPGW
         fabric_metadata.inner_l4_sport = hdr.inner_udp.sport;
         fabric_metadata.inner_l4_dport = hdr.inner_udp.dport;
-#endif // WITH_SPGW
 #ifdef WITH_INT
         transition parse_int;
 #else
@@ -250,19 +211,18 @@ parser FabricParser (packet_in packet,
 #endif // WITH_INT
     }
 
-    state parse_inner_tcp {
+        state parse_inner_tcp {
         packet.extract(hdr.inner_tcp);
-#ifdef WITH_SPGW
         fabric_metadata.inner_l4_sport = hdr.inner_tcp.sport;
         fabric_metadata.inner_l4_dport = hdr.inner_tcp.dport;
-#endif // WITH_SPGW
         transition accept;
     }
 
-    state parse_inner_icmp {
+        state parse_inner_icmp {
         packet.extract(hdr.inner_icmp);
         transition accept;
     }
+#endif // WITH_SPGW
 
 #ifdef WITH_INT
     state parse_int {
@@ -330,8 +290,6 @@ control FabricDeparser(packet_out packet,in parsed_headers_t hdr) {
         packet.emit(hdr.gtpu_ipv4);
         packet.emit(hdr.gtpu_udp);
         packet.emit(hdr.outer_gtpu);
-        packet.emit(hdr.outer_gtpu_options);
-        packet.emit(hdr.outer_gtpu_ext_psc);
 #endif // WITH_SPGW
         packet.emit(hdr.ipv4);
 #ifdef WITH_IPV6
@@ -340,14 +298,14 @@ control FabricDeparser(packet_out packet,in parsed_headers_t hdr) {
         packet.emit(hdr.tcp);
         packet.emit(hdr.udp);
         packet.emit(hdr.icmp);
+#ifdef WITH_SPGW
         // if we parsed a GTPU packet but did not decap it
         packet.emit(hdr.gtpu);
-        packet.emit(hdr.gtpu_options);
-        packet.emit(hdr.gtpu_ext_psc);
         packet.emit(hdr.inner_ipv4);
         packet.emit(hdr.inner_tcp);
         packet.emit(hdr.inner_udp);
         packet.emit(hdr.inner_icmp);
+#endif // WITH_SPGW
 #ifdef WITH_INT
         packet.emit(hdr.intl4_shim);
         packet.emit(hdr.int_header);

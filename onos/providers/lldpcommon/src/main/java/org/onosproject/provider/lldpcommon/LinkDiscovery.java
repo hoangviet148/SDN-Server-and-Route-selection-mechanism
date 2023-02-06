@@ -57,6 +57,51 @@ import static org.onosproject.net.AnnotationKeys.PORT_NAME;
 import static org.onosproject.net.PortNumber.portNumber;
 import static org.onosproject.net.flow.DefaultTrafficTreatment.builder;
 import static org.slf4j.LoggerFactory.getLogger;
+import java.util.Arrays;
+
+import java.sql.Timestamp;
+import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.lang.*;
+import java.util.*;
+import org.onosproject.net.device.PortStatistics;
+
+
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.LinkedList; 
+import java.util.Queue; 
+import org.onlab.packet.LLDPOrganizationalTLV;
+
+
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+
+import netscape.javascript.JSException;
+import netscape.javascript.JSObject;
+
+import java.io.BufferedReader;
+import java.io.DataOutputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+// import file
+import java.io.File;
+
+import org.onosproject.persistence.PersistenceService;
+
+
 
 /**
  * Run discovery process from a physical switch. Ports are initially labeled as
@@ -70,6 +115,7 @@ public class LinkDiscovery implements TimerTask {
     private static final String SCHEME_NAME = "linkdiscovery";
     private static final String ETHERNET = "ETHERNET";
 
+    // private final java.util.logging.Logger log = getLogger(getClass());
     private final Logger log = getLogger(getClass());
 
     private final DeviceId deviceId;
@@ -80,6 +126,47 @@ public class LinkDiscovery implements TimerTask {
 
     private Timeout timeout;
     private volatile boolean isStopped;
+
+    ArrayList<Timestamp> timePara = new ArrayList<Timestamp>();
+    // Initializing a dictionary of link delay
+
+    /*
+    public Map<String, ArrayList<Float>> linkDelay = new HashMap<String, ArrayList<Float>>();
+    public Map<String, ArrayList<Float>> linkPacketLoss = new HashMap<String, ArrayList<Float>>();
+    public Map<String, ArrayList<Float>> linkRate = new HashMap<String, ArrayList<Float>>(); 
+    */
+    public Map<String, Queue<Float>> linkDelay = new HashMap<String, Queue<Float>>();
+    public Map<String, Queue<Float>> linkPacketLoss = new HashMap<String, Queue<Float>>();
+    public Map<String, Queue<Float>> linkRate = new HashMap<String, Queue<Float>>(); 
+
+    public Map<String, Queue<Float>> linkBSentSrc = new HashMap<String, Queue<Float>>();
+    public Map<String, Queue<Float>> linkBReceivedSrc = new HashMap<String, Queue<Float>>();
+    public Map<String, Queue<Float>> linkPSentSrc = new HashMap<String, Queue<Float>>(); 
+    public Map<String, Queue<Float>> linkPReceivedSrc = new HashMap<String, Queue<Float>>(); 
+
+
+    public float link_capacity = 25; // max la 25 MGbyte
+    public int threshold_packet_loss = 3000; 
+    public static float lWeight = 0;
+    public static String idLink = "";
+    public int arrSize = 10;
+    public static float plLink = 0;
+    public static float rLink = 0;
+    public static float dLink = 0;
+    public static float plLLDP = 0;
+    public static int validatedLink = 1;
+
+
+    public static float rateQoE = 0;
+    public static String de_link = "", pl_link = "", r_link = "";
+    public static String bSentSrc_link = "", bReceivedSrc_link = "", pSentSrc_link = "", pReceivedSrc_link = "";
+    public static String srcLink = "", dstLink = "";
+
+    // API class to post data from ONOS
+    testAPI test= new testAPI();
+
+    public Map<String, Integer> countPara = new HashMap<String, Integer>();
+
 
     // Set of ports to be probed
     private final Map<Long, String> portMap = Maps.newConcurrentMap();
@@ -197,6 +284,365 @@ public class LinkDiscovery implements TimerTask {
         return false;
     }
 
+
+
+
+    public boolean saveArrPara(String id, Timestamp cts, float delay_link, float packet_loss, float rate_link, float bSentSrc, float bReceivedSrc, float pSentSrc, float pReceivedSrc){
+        if(linkDelay.containsKey(id)){
+            if(linkDelay.get(id).size() < arrSize){
+                linkDelay.get(id).add(delay_link);
+                linkPacketLoss.get(id).add(packet_loss);
+                linkRate.get(id).add(rate_link);
+
+                linkBSentSrc.get(id).add(bSentSrc);
+                linkBReceivedSrc.get(id).add(bReceivedSrc);
+                linkPSentSrc.get(id).add(pSentSrc);
+                linkPReceivedSrc.get(id).add(pReceivedSrc);
+
+            }else{
+                //Remove para at the head of queue
+                float removeLatencyPara = linkDelay.get(id).remove();
+                float removePLPara = linkPacketLoss.get(id).remove();
+                float removeLUPara = linkRate.get(id).remove();
+                float tmp = 0;
+                tmp = linkBSentSrc.get(id).remove();
+                tmp = linkBReceivedSrc.get(id).remove();
+                tmp = linkPSentSrc.get(id).remove();
+                tmp = linkPReceivedSrc.get(id).remove();
+
+                //Insert additional para
+                linkDelay.get(id).add(delay_link);
+                linkPacketLoss.get(id).add(packet_loss);
+                linkRate.get(id).add(rate_link);
+
+                linkBSentSrc.get(id).add(bSentSrc);
+                linkBReceivedSrc.get(id).add(bReceivedSrc);
+                linkPSentSrc.get(id).add(pSentSrc);
+                linkPReceivedSrc.get(id).add(pReceivedSrc);
+            }
+        }else{
+            linkDelay.put(id, new LinkedList<Float>());
+            linkPacketLoss.put(id, new LinkedList<Float>());
+            linkRate.put(id, new LinkedList<Float>());
+
+            linkDelay.get(id).add(delay_link);
+            linkPacketLoss.get(id).add(packet_loss);
+            linkRate.get(id).add(rate_link);
+
+            linkBSentSrc.put(id, new LinkedList<Float>());
+            linkBReceivedSrc.put(id, new LinkedList<Float>());
+            linkPSentSrc.put(id, new LinkedList<Float>());
+            linkPReceivedSrc.put(id, new LinkedList<Float>());
+
+
+            linkBSentSrc.get(id).add(bSentSrc);
+            linkBReceivedSrc.get(id).add(bReceivedSrc);
+            linkPSentSrc.get(id).add(pSentSrc);
+            linkPReceivedSrc.get(id).add(pReceivedSrc);
+        }
+
+        if(linkDelay.get(id).size() == arrSize){
+            de_link = linkDelay.get(id).toString().substring(1,linkDelay.get(id).toString().length()-1).replaceAll("\\s+","");
+            pl_link = linkPacketLoss.get(id).toString().substring(1,linkPacketLoss.get(id).toString().length()-1).replaceAll("\\s+","");
+            r_link =  linkRate.get(id).toString().substring(1,linkRate.get(id).toString().length()-1).replaceAll("\\s+","");
+
+
+            bSentSrc_link = linkBSentSrc.get(id).toString().substring(1,linkBSentSrc.get(id).toString().length()-1).replaceAll("\\s+","");
+            bReceivedSrc_link = linkBReceivedSrc.get(id).toString().substring(1,linkBReceivedSrc.get(id).toString().length()-1).replaceAll("\\s+","");
+            pSentSrc_link =  linkPSentSrc.get(id).toString().substring(1,linkPSentSrc.get(id).toString().length()-1).replaceAll("\\s+","");
+            pReceivedSrc_link =  linkPReceivedSrc.get(id).toString().substring(1,linkPReceivedSrc.get(id).toString().length()-1).replaceAll("\\s+","");             
+ 
+
+            //log.info("\n**********Byte sent: {}, byte received: {}, packet sent: {}, packet received: {}\n", bSentSrc_link, bReceivedSrc_link, pSentSrc_link, pReceivedSrc_link);
+
+        }
+
+
+        return true;
+    }
+
+
+
+    /*
+     * Calculate the delay and packet loss on a link
+     * 
+     *
+     * @param onoslldpDelay  The lldp packet on a link
+     * @return the link delay
+     */
+    public String getDelayPL(ONOSLLDP onoslldpDelay, String id){
+
+        //Calculate the link's delay using lldp
+        long delay = 0;
+        int count_packet_loss = 0;
+
+        Timestamp current_timestamp = new Timestamp(System.currentTimeMillis());
+        LLDPOrganizationalTLV tsLink = onoslldpDelay.getTimestampTLV();
+        if(tsLink != null){
+            ByteBuffer str_timestamp_tmp = ByteBuffer.allocate(8).put(tsLink.getInfoString());
+
+            long current_ts_nano = (current_timestamp.getTime());
+            str_timestamp_tmp.flip();
+            long lldp_ts_nano = str_timestamp_tmp.getLong();
+            // nano giay
+            delay = current_ts_nano - lldp_ts_nano;
+
+
+            //Remove the timestamp when the lldp packet reaches the controller
+            ONOSLLDP.removeElement(id, lldp_ts_nano);
+            ArrayList<Long> arrPacketLossLLDP = ONOSLLDP.getArray(id);
+            ArrayList<Long> arrTmpLoss = new ArrayList<Long>();
+
+            if(arrPacketLossLLDP != null){
+                if(arrPacketLossLLDP.size() >= 1){
+                    for(int i = 0; i < arrPacketLossLLDP.size(); i++){
+                        if(arrPacketLossLLDP.get(i) != null){
+                            // nguong 3000
+                            if(current_ts_nano - arrPacketLossLLDP.get(i) > threshold_packet_loss){
+                                count_packet_loss  = count_packet_loss + 1;
+                                //count_packet_loss += current_ts_nano - arrPacketLossLLDP.get(i);
+                                arrTmpLoss.add(arrPacketLossLLDP.get(i));
+                                
+                            }
+                        }
+
+                    }
+                    // Remove packets which are lost
+                    if(arrTmpLoss.size() >= 1){
+                        for(int j  = 0; j < arrTmpLoss.size(); j++){
+                            ONOSLLDP.removeElement(id, arrTmpLoss.get(j));
+                        }
+                    }
+                    arrTmpLoss.clear();
+
+                }
+            }
+
+        }
+
+        ////Disable the log
+        //log.info("\nPackets loss of LLDP of {}: {}\n", id, count_packet_loss);
+
+        return delay + "," + count_packet_loss;
+    }
+
+
+
+    //Get only link utilization on a link
+    public String getLinkUtilization(DeviceId sDeviceId, PortNumber sPort, DeviceId dDeviceId, PortNumber dPort){
+        float link_utilization = 0, packet_loss_rate = 0;
+
+        float bSent_Src = 0, bSent_Dst = 0, bReceived_Src = 0, bReceived_Dst =0, pSent_Src = 0, pReceived_Src = 0;
+        // khai bao
+        float pReceived_Dst = 0;
+
+        DeviceService deviceService = context.deviceService();
+        if(deviceService != null){
+            DeviceId dID = deviceService.getDevice(sDeviceId).id();
+            if(dID != null){
+                PortStatistics sPortSta = deviceService.getDeltaStatisticsForPort(dID, sPort);
+                if(sPortSta != null){
+                     bSent_Src = sPortSta.bytesSent();
+
+                     //Additonal port statistic
+                     bReceived_Src = sPortSta.bytesReceived();
+                     pSent_Src = sPortSta.packetsSent();
+                     pReceived_Src = sPortSta.packetsReceived();
+                }
+                PortStatistics dPortSta  = deviceService.getDeltaStatisticsForPort(dID, dPort);
+                if(dPortSta != null){
+                    bSent_Dst = dPortSta.bytesSent();
+                    bReceived_Dst = dPortSta.bytesReceived();
+
+                    // them
+                    pReceived_Dst = dPortSta.packetsReceived();
+                }
+                if(sPortSta != null && dPortSta != null){
+                    // doi tu byte sang MGbyte
+                    link_utilization = (bSent_Src + bReceived_Src) / (link_capacity * 1000000); 
+
+                    // packet loss rate 
+                    // xu ly ngoai le bi am neu tu so trong cong thuc bi am
+                    if (pReceived_Dst >= pSent_Src){
+                        packet_loss_rate = 0;
+
+                    }
+                    else{
+                        packet_loss_rate = (pSent_Src - pReceived_Dst) / pSent_Src;
+                    }
+                  
+                    // packet_loss_rate = (bSent_Src - bReceived_Src) / bSent_Src;
+
+
+                    // log.info("\n!!!!!!!!!!!!!!!!!Packet loss rate = {}\n", packet_loss_rate);
+                    // mau so convert: 100Mbit/s => byte/s
+                    // link_utilization = (bSent_Src + bReceived_Dst) / (link_capacity * 1000000 / 8); 
+
+                    
+                }
+            }
+            // log.info("\n**********Byte sent: {}, byte received: {}, packet sent: {}, packet received: {}\n", bSent_Src, bReceived_Src, pSent_Src, pReceived_Src);
+            /*
+            if(deviceService.getDeltaStatisticsForPort(deviceService.getDevice(sDeviceId).id(), sPort) != null){
+            bSent_Src = deviceService.getDeltaStatisticsForPort(deviceService.getDevice(sDeviceId).id(), sPort).bytesSent();
+            }
+            if(deviceService.getDeltaStatisticsForPort(deviceService.getDevice(dDeviceId).id(), dPort) != null){
+                bSent_Dst = deviceService.getDeltaStatisticsForPort(deviceService.getDevice(dDeviceId).id(), dPort).bytesSent();
+            }
+            */
+        }
+
+        
+
+        return link_utilization + "," + bSent_Src + "," + bReceived_Src + "," + pSent_Src + "," + pReceived_Dst + "," + packet_loss_rate;
+
+    }
+
+    public void checkSwitchConnectServer(String srcLink, DeviceId sDeviceId, PortNumber sPort) throws IOException
+    {
+        boolean isConnect = false;
+        int portInfo = 0;
+        String hostIP = "";
+        // String hostIP = null;
+        // src cua lldp
+        String srcSwitch = new String(srcLink);
+        String fileName = "/home/onos/onos/serverInfo.txt";
+        File file = new File(fileName);
+        FileReader fr = new FileReader(file);
+        BufferedReader br = new BufferedReader(fr);
+        String line;
+        while((line = br.readLine()) != null){
+            // Doc file
+            String[] infoArray = line.split(",");
+
+            // phan tu thu nhat la ten cua switch         
+            String srcInfo = new String(infoArray[0]);
+
+            // phan tu hai la port cua switch 
+            portInfo = Integer.valueOf(infoArray[1]);
+
+            // phan tu thu ba  la IP cua host 
+            hostIP = infoArray[2];
+            // log.info("\n!!!!!!!!!!!!!!!!!!!!!! host IP {}\n", hostIP);
+
+            // log.info("\nSo sanh {} voi doc tu file {}\n",srcSwitch, srcInfo );
+            // kiem tra xem src switch hien tai co giong voi switch cam cao host trong file khai bao khong
+            if(srcSwitch.equals(srcInfo))
+            {
+               isConnect = true;
+               log.info("\n!!!!!!!!!!!!!!So sanh thanh cong {} voi doc tu file {}\n",srcSwitch, srcInfo );
+               postAPIEndPointSwitchTraffic(srcLink, sDeviceId, sPort, portInfo, hostIP);
+            }
+            else{
+               isConnect = false;
+            //    log.info("\n!!!!!!!!!!!!!!So sanh khong thanh cong {} voi doc tu file {}\n",srcSwitch, srcInfo );
+            //    log.info("\n************Switch {} khong cam vao Server nao\n", srcLink);
+            }
+        }
+   
+        
+    }
+
+    // ham nay de post API ra ngoai
+    public void postAPIEndPointSwitchTraffic(String srcLink, DeviceId sDeviceId, PortNumber sPort, int portInfo,
+                                            String hostIP)
+    {
+        float endPointTraffic;
+        // sua portInfo la sPort
+        endPointTraffic = getEndPointSwitchTraffic(sDeviceId, sPort, portInfo);
+
+        log.info("\n************Switch {} cam vao Server {} co Traffic = {} byte/s\n", srcLink, hostIP, endPointTraffic);
+
+        /// day API ra ngoai
+        test.sendPostServerInfo(srcLink, portInfo, endPointTraffic, hostIP);
+        
+    }
+    // this method is to get traffic of Server given its connected switch and port
+    public float getEndPointSwitchTraffic(DeviceId sDeviceId, PortNumber sPort, int portInfo)
+    {
+        float endPointTraffic = 0;
+
+        DeviceService deviceService = context.deviceService();
+
+        // get port value
+        PortNumber srcPort = portNumber(portInfo);
+
+        if(deviceService != null)
+        {
+            DeviceId dID = deviceService.getDevice(sDeviceId).id();
+            if(dID != null)
+            {
+                PortStatistics sPortSta = deviceService.getDeltaStatisticsForPort(dID, srcPort);
+                if(sPortSta != null)
+                {
+                    endPointTraffic = sPortSta.bytesSent();
+                    //  bSent_Src = sPortSta.bytesSent();
+
+                    //  //Additonal port statistic
+                    //  bReceived_Src = sPortSta.bytesReceived();
+                    //  pSent_Src = sPortSta.packetsSent();
+                    //  pReceived_Src = sPortSta.packetsReceived();
+                }        
+            }
+        }
+        return endPointTraffic;
+    }
+    // tuan son
+    // public String getQoSParams(DeviceId sDeviceId, PortNumber sPort, DeviceId dDeviceId, PortNumber dPort){
+    //     float link_utilization = 0;
+
+    //     float bSent_Src = 0, bSent_Dst = 0, bReceived_Src = 0, bReceived_Dst =0, pSent_Src = 0, pReceived_Src = 0, pReceived_Dst = 0;
+    //     float packet_loss_rate = 0;
+
+    //     DeviceService deviceService = context.deviceService();
+    //     if(deviceService != null){
+    //         DeviceId dID = deviceService.getDevice(sDeviceId).id();
+    //         if(dID != null){
+    //             PortStatistics sPortSta = deviceService.getDeltaStatisticsForPort(dID, sPort);
+    //             if(sPortSta != null){
+    //                  bSent_Src = sPortSta.bytesSent();
+
+    //                  //Additonal port statistic
+    //                  bReceived_Src = sPortSta.bytesReceived();
+    //                  pSent_Src = sPortSta.packetsSent();
+    //                  pReceived_Src = sPortSta.packetsReceived();
+    //             }
+    //             PortStatistics dPortSta  = deviceService.getDeltaStatisticsForPort(dID, dPort);
+    //             if(dPortSta != null){
+    //                 bSent_Dst = dPortSta.bytesSent();
+    //                 bReceived_Dst = dPortSta.bytesReceived();
+    //                 // tuan son
+    //                 pReceived_Dst = dPortSta.packetsReceived();
+
+    //             }
+    //             if(sPortSta != null && dPortSta != null){
+    //                 // link_utilization = (bSent_Src + bSent_Dst)/(link_capacity * 100000); 
+    //                 packet_loss_rate = (pReceived_Dst - pSent_Src) / pReceived_Dst;
+    //                 // mau so convert: 100Mbit/s => byte/s
+    //                 link_utilization = (bSent_Src + bSent_Dst) / (link_capacity * 1000000 / 8);  // 10 mu 6         
+    //             }
+    //         }
+            
+    //         // log.info("\n**********packet sent : {}, packet received: {}, packet loss rate\n",  pSent_Src, pReceived_Dst, packet_loss_rate);
+
+           
+    //         /*
+    //         if(deviceService.getDeltaStatisticsForPort(deviceService.getDevice(sDeviceId).id(), sPort) != null){
+    //         bSent_Src = deviceService.getDeltaStatisticsForPort(deviceService.getDevice(sDeviceId).id(), sPort).bytesSent();
+    //         }
+    //         if(deviceService.getDeltaStatisticsForPort(deviceService.getDevice(dDeviceId).id(), dPort) != null){
+    //             bSent_Dst = deviceService.getDeltaStatisticsForPort(deviceService.getDevice(dDeviceId).id(), dPort).bytesSent();
+    //         }
+    //         */
+    //     }
+
+    //     // return packet_loss_rate;
+
+    //     return link_utilization + "," + bSent_Src + "," + bReceived_Src + "," + pSent_Src + "," + pReceived_Src + "," + packet_loss_rate;
+
+    // }
+
+    // // lang nghe tat ca cac link giua theo giao thuc khi thay doi
     private boolean processOnosLldp(PacketContext packetContext, Ethernet eth) {
         ONOSLLDP onoslldp = ONOSLLDP.parseONOSLLDP(eth);
         if (onoslldp != null) {
@@ -208,8 +654,11 @@ public class LinkDiscovery implements TimerTask {
                         Type.DIRECT : Type.INDIRECT;
 
                 /* Verify MAC in LLDP packets */
+
+                //Add 2s to maxDiscoveryDelay
                 if (!ONOSLLDP.verify(onoslldp, context.lldpSecret(), context.maxDiscoveryDelay())) {
-                    log.warn("LLDP Packet failed to validate!");
+                    log.warn("LLDP Packet failed to validate, timestamp!");
+                    validatedLink = 0;
                     return true;
                 }
             }
@@ -217,18 +666,116 @@ public class LinkDiscovery implements TimerTask {
             PortNumber srcPort = portNumber(onoslldp.getPort());
             PortNumber dstPort = packetContext.inPacket().receivedFrom().port();
 
+
+
             String idString = onoslldp.getDeviceString();
             if (!isNullOrEmpty(idString)) {
                 try {
                     DeviceId srcDeviceId = DeviceId.deviceId(idString);
                     DeviceId dstDeviceId = packetContext.inPacket().receivedFrom().deviceId();
 
-                    ConnectPoint src = translateSwitchPort(srcDeviceId, srcPort);
+                    ConnectPoint src = new ConnectPoint(srcDeviceId, srcPort);
                     ConnectPoint dst = new ConnectPoint(dstDeviceId, dstPort);
 
                     LinkDescription ld = new DefaultLinkDescription(src, dst, lt);
+
+                    srcLink = srcDeviceId.toString();
+                    dstLink = dstDeviceId.toString();
+                
+                    //Kiem tra ta ca cac srcDeviceId va port nam trong danh sach
+                    // Goi ham tinh EndPoint traffic
+                    // ten switch, id switch, port switch
+
+                    try {
+                        checkSwitchConnectServer(srcLink, srcDeviceId, srcPort);
+                    } catch (IOException e) {
+                        log.info("\nDoc file SERVER INFO loiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii");
+                        // e.printStackTrace();
+                    }
+                    
+                    // checkSwitchConnectServer(srcLink, );
+
+                    //log.info("\nLink0 from {} to {}\n",srcLink,dstLink);
+                    //if((srcLink.compareTo("of:0000000000000006") == 0 && dstLink.compareTo("of:0000000000000003") == 0) || (srcLink.compareTo("of:0000000000000003") == 0 && dstLink.compareTo("of:0000000000000007") == 0)){
+                        //log.info("\nLink1 from {} to {}\n",srcLink,dstLink);
+                        //Calculate the link utilization
+                    float rLink = 0, bSentSrc = 0, bReceivedSrc = 0, pSentSrc = 0, pReceivedSrc = 0;
+                    float packetLossRate = 0, pReceivedDst = 0;
+                    String[] tmpSta = getLinkUtilization(srcDeviceId, srcPort, dstDeviceId, dstPort).split(",");
+                    // String[] tmpSta = getQoSParams(srcDeviceId, srcPort, dstDeviceId, dstPort).split(",");
+                        
+                        
+                    // sua array co 6 phan tu
+                    if(tmpSta.length == 6){
+                        rLink = Float.parseFloat(tmpSta[0]);
+                        if(rLink > 1){
+                            rLink = 1;
+                        }
+                        bSentSrc = Float.parseFloat(tmpSta[1]);
+                        bReceivedSrc = Float.parseFloat(tmpSta[2]);
+                        pSentSrc = Float.parseFloat(tmpSta[3]);
+                        // pReceivedSrc = Float.parseFloat(tmpSta[4])
+                        pReceivedDst = Float.parseFloat(tmpSta[4]);
+                        
+                        // sua code 
+                        packetLossRate = Float.parseFloat(tmpSta[5]);
+                    }
+                    //Avoid linkU = 0
+                    //Calculate the delay and packet loss
+                    Timestamp current_timestamp_para = new Timestamp(System.currentTimeMillis());
+                    String idPort = srcDeviceId.toString()+"-"+srcPort.toString();
+                    idLink = srcDeviceId.toString()+"-"+dstDeviceId.toString();
+                    
+                    String strDPL = getDelayPL(onoslldp, idPort);
+                    if (strDPL != "" && strDPL != ","){
+                        String[] s = strDPL.split(",");
+                        dLink = Float.parseFloat(s[0]);
+                        plLLDP = (Float.parseFloat(s[1]) > 1 ? 1 : Float.parseFloat(s[1]));
+                    }
+                    
+                    if(!((dLink == 0 && plLLDP == 0) || rLink == 0)){
+                        //Save data to arr of link paras
+                        saveArrPara(idPort, current_timestamp_para, dLink, plLLDP, rLink, bSentSrc, bReceivedSrc, pSentSrc, pReceivedSrc);
+                    }else{
+                        validatedLink = 0;
+                    }
+                    // sua code
+                    // log.info("\n**********Byte sent: {}, byte received: {}, packet sent: {}, packet received: {}, packet loss rate: {}\n", bSentSrc, bReceivedSrc, pSentSrc, pReceivedSrc, packetLossRate);
+                    
+                    // log.info("\n**********Byte sent src: {}, byte received src: {}, packet sent src : {}, packet received dst: {}, packet loss rate: {}\n", bSentSrc, bReceivedSrc, pSentSrc, pReceivedDst, packetLossRate);
+                    // log.info("\nLink from {}:{} to {}:{}, Delay: {} ms, Packet loss LLDP: {}, Link utilization: {}\n", srcDeviceId, srcPort, dstDeviceId, dstPort, dLink, plLLDP, rLink);
+                   
+                    // log.info("\nLink from {}:{} to {}:{}, Delay: {} ms, Packet loss: {}, Link utilization: {}\n", srcDeviceId, srcPort, dstDeviceId, dstPort, dLink, packetLossRate, rLink);
+                    
+                    // sua tham so plLLDP sang packet loss rate
+                    // test la tham chieu den class post API
+                    test.sendPost(srcDeviceId, dstDeviceId, dLink,
+                                 packetLossRate, rLink,
+                                 bSentSrc, bReceivedSrc, pSentSrc, pReceivedSrc, current_timestamp_para);
+                    
+                    
                     context.providerService().linkDetected(ld);
                     context.touchLink(LinkKey.linkKey(src, dst));
+                            
+                    // write data to json object and post to api
+                    // final String urlOdl = "http://127.0.0.1:5000/";
+                    // JSONObject dataForm = new JSONObject();
+                    // moi lan run se co 1 file json moi va append json moi vao json hien co o flask
+                    // python
+                    // JSONObject dataFinal = new JSONObject();
+                    // dataFinal.put("time", current_timestamp_para.getTime());
+                    // dataFinal.put("src", srcDeviceId );
+                    // dataFinal.put("dst", dstDeviceId );
+                    // dataFinal.put("delay",  dLink);
+                    // dataFinal.put("packetLoss", plLLDP );
+                    // dataFinal.put("linkUtilization", rLink );
+                
+                
+                    // dataFinal.put("byteSent", bSentSrc);
+                    // dataFinal.put("byteReceived", bReceivedSrc);
+                    // dataFinal.put("packetSent", pSentSrc);
+                    // dataFinal.put("packetReceived", pReceivedSrc);
+
                 } catch (IllegalStateException | IllegalArgumentException e) {
                     log.warn("There is a exception during link creation: {}", e.getMessage());
                     return true;
@@ -239,6 +786,9 @@ public class LinkDiscovery implements TimerTask {
         return false;
     }
 
+
+    
+  
     private boolean processLldp(PacketContext packetContext, Ethernet eth) {
         ONOSLLDP onoslldp = ONOSLLDP.parseLLDP(eth);
         if (onoslldp != null) {
@@ -260,7 +810,7 @@ public class LinkDiscovery implements TimerTask {
             Optional<Device> srcDevice = findSourceDeviceByChassisId(deviceService, srcChassisId);
 
             if (!srcDevice.isPresent()) {
-                log.debug("source device not found. srcChassisId value: {}", srcChassisId);
+                log.warn("source device not found. srcChassisId value: {}", srcChassisId);
                 return false;
             }
             Optional<Port> sourcePort = findSourcePortByName(
@@ -269,7 +819,7 @@ public class LinkDiscovery implements TimerTask {
                     srcDevice.get());
 
             if (!sourcePort.isPresent()) {
-                log.debug("source port not found. sourcePort value: {}", sourcePort);
+                log.warn("source port not found. sourcePort value: {}", sourcePort);
                 return false;
             }
 
@@ -370,30 +920,17 @@ public class LinkDiscovery implements TimerTask {
      */
     @Override
     public void run(Timeout t) {
-        try {
-            // Check first if it has been stopped
-            if (isStopped()) {
-                return;
-            }
-            // Verify if we are still the master
-            if (context.mastershipService().isLocalMaster(deviceId)) {
-                log.trace("Sending probes from {}", deviceId);
-                ImmutableMap.copyOf(portMap).forEach(this::sendProbes);
-            }
-        } catch (Exception e) {
-            // Catch all exceptions to avoid timer task being cancelled
-            if (!isStopped()) {
-                // Error condition
-                log.error("Exception thrown during link discovery process", e);
-            } else {
-                // Provider is shutting down, the error can be ignored
-                log.trace("Shutting down, ignoring error", e);
-            }
-        } finally {
-            // if it has not been stopped - re-schedule itself
-            if (!isStopped()) {
-                timeout = t.timer().newTimeout(this, context.probeRate(), MILLISECONDS);
-            }
+        if (isStopped()) {
+            return;
+        }
+
+        if (context.mastershipService().isLocalMaster(deviceId)) {
+            log.trace("Sending probes from {}", deviceId);
+            ImmutableMap.copyOf(portMap).forEach(this::sendProbes);
+        }
+
+        if (!isStopped()) {
+            timeout = t.timer().newTimeout(this, context.probeRate(), MILLISECONDS);
         }
     }
 
@@ -458,6 +995,7 @@ public class LinkDiscovery implements TimerTask {
             return;
         }
         log.trace("Sending probes out of {}@{}", portNumber, deviceId);
+        //log.info("Sending probes out of {}@{}", portNumber, deviceId);
         OutboundPacket pkt = createOutBoundLldp(portNumber, portDesc);
         if (pkt != null) {
             context.packetService().emit(pkt);
@@ -476,15 +1014,5 @@ public class LinkDiscovery implements TimerTask {
 
     public boolean containsPort(long portNumber) {
         return portMap.containsKey(portNumber);
-    }
-
-    /* Port number created from ONOS lldp does not have port name
-       we use the device service as translation service */
-    private ConnectPoint translateSwitchPort(DeviceId deviceId, PortNumber portNumber) {
-        Port devicePort = this.context.deviceService().getPort(deviceId, portNumber);
-        if (devicePort != null) {
-            return new ConnectPoint(deviceId, devicePort.number());
-        }
-        return new ConnectPoint(deviceId, portNumber);
     }
 }

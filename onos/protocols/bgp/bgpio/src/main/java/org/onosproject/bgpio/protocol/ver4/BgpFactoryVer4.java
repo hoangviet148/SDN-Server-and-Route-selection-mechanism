@@ -22,7 +22,6 @@ import org.onosproject.bgpio.protocol.BgpMessage;
 import org.onosproject.bgpio.protocol.BgpMessageReader;
 import org.onosproject.bgpio.protocol.BgpNotificationMsg;
 import org.onosproject.bgpio.protocol.BgpOpenMsg;
-import org.onosproject.bgpio.protocol.BgpRouteRefreshMsg;
 import org.onosproject.bgpio.protocol.BgpUpdateMsg;
 import org.onosproject.bgpio.protocol.BgpVersion;
 
@@ -51,11 +50,6 @@ public class BgpFactoryVer4 implements BgpFactory {
     @Override
     public BgpUpdateMsg.Builder updateMessageBuilder() {
         return new BgpUpdateMsgVer4.Builder();
-    }
-
-    @Override
-    public BgpRouteRefreshMsg.Builder routeRefreshMsgBuilder() {
-        return new BgpRouteRefreshMsgVer4.Builder();
     }
 
     @Override

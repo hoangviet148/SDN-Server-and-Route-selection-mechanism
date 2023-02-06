@@ -16,7 +16,6 @@
 
 package org.onosproject.net.meter;
 
-import org.onosproject.core.ApplicationId;
 import org.onosproject.net.DeviceId;
 
 import java.util.Collection;
@@ -36,17 +35,7 @@ public class MeterServiceAdapter implements MeterService {
     }
 
     @Override
-    public void withdraw(MeterRequest meter, MeterCellId meterCellId) {
-
-    }
-
-    @Override
     public Meter getMeter(DeviceId deviceId, MeterId id) {
-        return null;
-    }
-
-    @Override
-    public Meter getMeter(DeviceId deviceId, MeterCellId meterCellId) {
         return null;
     }
 
@@ -57,11 +46,6 @@ public class MeterServiceAdapter implements MeterService {
 
     @Override
     public Collection<Meter> getMeters(DeviceId deviceId) {
-        return null;
-    }
-
-    @Override
-    public Collection<Meter> getMeters(DeviceId deviceId, MeterScope scope) {
         return null;
     }
 
@@ -77,11 +61,6 @@ public class MeterServiceAdapter implements MeterService {
 
     @Override
     public void purgeMeters(DeviceId deviceId) {
-
-    }
-
-    @Override
-    public void purgeMeters(DeviceId deviceId, ApplicationId appId) {
 
     }
 

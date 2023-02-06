@@ -273,7 +273,6 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
                 case L4MODIFICATION:
                 case PROTOCOL_INDEPENDENT:
                 case EXTENSION:
-                case TRUNCATE:
                     current.add(instruction);
                     break;
                 case TABLE:
@@ -506,16 +505,6 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
         }
 
         @Override
-        public Builder setArpTpa(IpAddress addr) {
-            return add(Instructions.modArpTpa(addr));
-        }
-
-        @Override
-        public Builder setArpTha(MacAddress addr) {
-            return add(Instructions.modArpTha(addr));
-        }
-
-        @Override
         public Builder setArpOp(short op) {
             return add(Instructions.modL3ArpOp(op));
         }
@@ -557,11 +546,6 @@ public final class DefaultTrafficTreatment implements TrafficTreatment {
             clear = treatment.clearedDeferred();
             current = previous;
             return this;
-        }
-
-        @Override
-        public TrafficTreatment.Builder truncate(int maxLen) {
-            return add(Instructions.truncate(maxLen));
         }
 
         @Override

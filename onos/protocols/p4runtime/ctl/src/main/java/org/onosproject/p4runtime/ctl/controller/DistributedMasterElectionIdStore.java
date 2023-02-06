@@ -17,7 +17,6 @@
 package org.onosproject.p4runtime.ctl.controller;
 
 import com.google.common.collect.Maps;
-import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.onlab.util.KryoNamespace;
 import org.onosproject.net.DeviceId;
@@ -52,7 +51,6 @@ public class DistributedMasterElectionIdStore implements MasterElectionIdStore {
     private static final KryoNamespace SERIALIZER = KryoNamespace.newBuilder()
             .register(KryoNamespaces.API)
             .register(Pair.class)
-            .register(ImmutablePair.class)
             .register(Long.class)
             .register(BigInteger.class)
             .build();

@@ -22,7 +22,6 @@ import org.apache.commons.lang3.tuple.Triple;
 import com.google.common.annotations.Beta;
 import com.google.common.collect.Lists;
 
-import org.onlab.util.Tools;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.NodeId;
@@ -105,7 +104,6 @@ import static org.onosproject.netconf.NetconfDeviceInfo.extractIpPortPath;
                 NETCONF_REPLY_TIMEOUT + ":Integer=" + NETCONF_REPLY_TIMEOUT_DEFAULT,
                 NETCONF_IDLE_TIMEOUT + ":Integer=" + NETCONF_IDLE_TIMEOUT_DEFAULT,
                 SSH_LIBRARY + "=" + SSH_LIBRARY_DEFAULT,
-                SSH_KEY_PATH + "=" + SSH_KEY_PATH_DEFAULT,
         })
 public class NetconfControllerImpl implements NetconfController {
 
@@ -120,9 +118,6 @@ public class NetconfControllerImpl implements NetconfController {
 
     /** SSH client library to use. */
     protected static String sshLibrary = SSH_LIBRARY_DEFAULT;
-
-    /** Private SSH Key File Path to use. */
-    protected static String sshKeyPath = SSH_KEY_PATH_DEFAULT;
 
     protected NetconfSshClientLib sshClientLib = NetconfSshClientLib.APACHE_MINA;
 
@@ -163,8 +158,6 @@ public class NetconfControllerImpl implements NetconfController {
     public static final Logger log = LoggerFactory
             .getLogger(NetconfControllerImpl.class);
 
-    private static final int CORE_POOL_SIZE = 32;
-
     private Map<DeviceId, NetconfDevice> netconfDeviceMap = new ConcurrentHashMap<>();
 
     private Map<DeviceId, Lock> netconfCreateMutex = new ConcurrentHashMap<>();
@@ -178,10 +171,11 @@ public class NetconfControllerImpl implements NetconfController {
 
 
     protected final ExecutorService executor =
-            Executors.newFixedThreadPool(CORE_POOL_SIZE, groupedThreads("onos/netconfdevicecontroller",
+            Executors.newCachedThreadPool(groupedThreads("onos/netconfdevicecontroller",
                                                          "connection-reopen-%d", log));
 
-    private final ExecutorService remoteRequestExecutor = Executors.newFixedThreadPool(CORE_POOL_SIZE);
+    private final ExecutorService remoteRequestExecutor =
+            Executors.newCachedThreadPool();
 
     protected NodeId localNodeId;
 
@@ -260,7 +254,6 @@ public class NetconfControllerImpl implements NetconfController {
             netconfConnectTimeout = NETCONF_CONNECT_TIMEOUT_DEFAULT;
             netconfIdleTimeout = NETCONF_IDLE_TIMEOUT_DEFAULT;
             sshLibrary = SSH_LIBRARY_DEFAULT;
-            sshKeyPath = SSH_KEY_PATH_DEFAULT;
             sshClientLib = NetconfSshClientLib.APACHE_MINA;
             log.info("No component configuration");
             return;
@@ -269,7 +262,6 @@ public class NetconfControllerImpl implements NetconfController {
         Dictionary<?, ?> properties = context.getProperties();
 
         String newSshLibrary;
-        String newSshKeyPath;
 
         int newNetconfReplyTimeout = getIntegerProperty(
                 properties, NETCONF_REPLY_TIMEOUT, netconfReplyTimeout);
@@ -279,7 +271,6 @@ public class NetconfControllerImpl implements NetconfController {
                 properties, NETCONF_IDLE_TIMEOUT, netconfIdleTimeout);
 
         newSshLibrary = get(properties, SSH_LIBRARY);
-        newSshKeyPath = get(properties, SSH_KEY_PATH);
 
         if (newNetconfConnectTimeout < 0) {
             log.warn("netconfConnectTimeout is invalid - less than 0");
@@ -299,15 +290,11 @@ public class NetconfControllerImpl implements NetconfController {
             sshLibrary = newSshLibrary;
             sshClientLib = NetconfSshClientLib.getEnum(newSshLibrary);
         }
-        if (newSshKeyPath != null) {
-            sshKeyPath = newSshKeyPath;
-        }
-        log.info("Settings: {} = {}, {} = {}, {} = {}, {} = {}, {} = {}",
+        log.info("Settings: {} = {}, {} = {}, {} = {}, {} = {}",
                  NETCONF_REPLY_TIMEOUT, netconfReplyTimeout,
                  NETCONF_CONNECT_TIMEOUT, netconfConnectTimeout,
                  NETCONF_IDLE_TIMEOUT, netconfIdleTimeout,
-                 SSH_LIBRARY, sshLibrary,
-                 SSH_KEY_PATH, sshKeyPath);
+                 SSH_LIBRARY, sshLibrary);
     }
 
     @Override
@@ -383,7 +370,7 @@ public class NetconfControllerImpl implements NetconfController {
 
             if (netCfg != null) {
                 log.debug("Device {} is present in NetworkConfig", deviceId);
-                deviceInfo = new NetconfDeviceInfo(netCfg, deviceId);
+                deviceInfo = new NetconfDeviceInfo(netCfg);
             } else {
                 log.debug("Creating NETCONF device {}", deviceId);
                 deviceInfo = createDeviceInfo(deviceId);
@@ -571,25 +558,6 @@ public class NetconfControllerImpl implements NetconfController {
         }
     }
 
-    @Override
-    public boolean pingDevice(DeviceId deviceId) {
-        try {
-            CompletableFuture<CharSequence> future = getNetconfDevice(deviceId).getSession().asyncGet();
-            CharSequence reply = Tools.futureGetOrElse(future, NETCONF_REPLY_TIMEOUT_DEFAULT, TimeUnit.SECONDS,
-                                  "Unable to read netconf data tree from device");
-            if (reply.equals("Unable to read netconf data tree from device")) {
-                log.error("Failed to get netconf data tree for device : {}", deviceId);
-                return false;
-            }
-            log.debug("Netconf data tree for device : {} -> {}", deviceId, reply);
-        } catch (NetconfException e) {
-            log.error("Error while getting netconf data tree for device : {}", deviceId);
-            log.error("Error details : ", e);
-            return false;
-        }
-        return true;
-    }
-
     public <T> CompletableFuture<T> relayMessageToMaster(NetconfProxyMessage proxyMessage) {
         DeviceId deviceId = proxyMessage.deviceId();
 
@@ -624,7 +592,6 @@ public class NetconfControllerImpl implements NetconfController {
     }
 
     private <T> CompletableFuture<T> handleProxyMessage(NetconfProxyMessage proxyMessage) {
-        countDownLatch = new CountDownLatch(1);
         try {
             switch (proxyMessage.subjectType()) {
                 case GET_DEVICE_CAPABILITIES_SET:
@@ -672,7 +639,7 @@ public class NetconfControllerImpl implements NetconfController {
             NetconfProxyMessage.SubjectType subjectType = proxyMessage.subjectType();
             NetconfSession secureTransportSession;
 
-            if (netconfDeviceMap.get(deviceId) != null && netconfDeviceMap.get(deviceId).isMasterSession()) {
+            if (netconfDeviceMap.get(deviceId).isMasterSession()) {
                 secureTransportSession = netconfDeviceMap.get(deviceId).getSession();
             } else {
                 throw new NetconfException("Ssh session not present");
@@ -742,7 +709,7 @@ public class NetconfControllerImpl implements NetconfController {
             NetconfProxyMessage.SubjectType subjectType = proxyMessage.subjectType();
             NetconfSession secureTransportSession;
 
-            if (netconfDeviceMap.get(deviceId) != null && netconfDeviceMap.get(deviceId).isMasterSession()) {
+            if (netconfDeviceMap.get(deviceId).isMasterSession()) {
                 secureTransportSession = netconfDeviceMap.get(deviceId).getSession();
             } else {
                 throw new NetconfException("SSH session not present");
@@ -815,9 +782,6 @@ public class NetconfControllerImpl implements NetconfController {
                         if (device != null) {
                             device.getSession().checkAndReestablish();
                             log.info("Connection with device {} was reestablished", did);
-                            for (NetconfDeviceListener l : netconfDeviceListeners) {
-                                l.netconfConnectionReestablished(did);
-                            }
                         } else {
                             log.warn("The device {} is not in the system", did);
                         }

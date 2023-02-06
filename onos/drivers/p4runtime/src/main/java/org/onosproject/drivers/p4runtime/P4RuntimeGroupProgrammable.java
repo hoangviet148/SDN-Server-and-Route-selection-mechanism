@@ -51,7 +51,6 @@ public class P4RuntimeGroupProgrammable
         final List<GroupOperation> preGroups = Lists.newArrayList();
         groupOps.operations().forEach(op -> {
             switch (op.groupType()) {
-                case INDIRECT:
                 case SELECT:
                     actionGroups.add(op);
                     break;
@@ -60,6 +59,7 @@ public class P4RuntimeGroupProgrammable
                     preGroups.add(op);
                     break;
                 case FAILOVER:
+                case INDIRECT:
                 default:
                     log.warn("{} group type not supported [{}]", op.groupType(), op);
             }

@@ -33,7 +33,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.onlab.util.Tools;
-import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.ConsistentMap;
@@ -50,7 +49,6 @@ import org.onosproject.ui.UiPreferencesService;
 import org.onosproject.ui.UiSessionToken;
 import org.onosproject.ui.UiTokenService;
 import org.onosproject.ui.UiTopo2OverlayFactory;
-import org.onosproject.ui.UiTopoHighlighterFactory;
 import org.onosproject.ui.UiTopoMap;
 import org.onosproject.ui.UiTopoMapFactory;
 import org.onosproject.ui.UiTopoOverlayFactory;
@@ -62,12 +60,9 @@ import org.onosproject.ui.impl.topo.Traffic2Overlay;
 import org.onosproject.ui.impl.topo.model.UiSharedTopologyModel;
 import org.onosproject.ui.lion.LionBundle;
 import org.onosproject.ui.lion.LionUtils;
-import org.onosproject.ui.topo.AbstractTopoMonitor;
-import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Deactivate;
-import org.osgi.service.component.annotations.Modified;
 import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
@@ -75,7 +70,6 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
-import java.util.Dictionary;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -93,23 +87,13 @@ import static org.onosproject.security.AppPermission.Type.UI_READ;
 import static org.onosproject.security.AppPermission.Type.UI_WRITE;
 import static org.onosproject.ui.UiView.Category.NETWORK;
 import static org.onosproject.ui.UiView.Category.PLATFORM;
-import static org.onosproject.ui.impl.OsgiPropertyConstants.TRAFFIC_REFRESH_MS;
-import static org.onosproject.ui.impl.OsgiPropertyConstants.TRAFFIC_REFRESH_MS_DEFAULT;
 import static org.onosproject.ui.impl.lion.BundleStitcher.generateBundles;
 
 /**
  * Manages the user interface extensions.
  */
-@Component(immediate = true,
-        service = {
-                UiExtensionService.class,
-                UiPreferencesService.class,
-                SpriteService.class,
-                UiTokenService.class
-        },
-        property = {
-                TRAFFIC_REFRESH_MS + ":Integer=" + TRAFFIC_REFRESH_MS_DEFAULT,
-        })
+@Component(immediate = true, service = { UiExtensionService.class, UiPreferencesService.class, SpriteService.class,
+        UiTokenService.class })
 public class UiExtensionManager
         implements UiExtensionService, UiPreferencesService, SpriteService,
         UiTokenService {
@@ -156,7 +140,6 @@ public class UiExtensionManager
     private final List<UiExtension> extensions = Lists.newArrayList();
 
     private final List<UiGlyph> glyphs = Lists.newArrayList();
-    private final List<UiTopoHighlighterFactory> highlighterFactories = Lists.newArrayList();
 
     // Map of views to extensions
     private final Map<String, UiExtension> views = Maps.newHashMap();
@@ -169,9 +152,6 @@ public class UiExtensionManager
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected StorageService storageService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected ComponentConfigService cfgService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private UiSharedTopologyModel sharedModel;
@@ -196,7 +176,6 @@ public class UiExtensionManager
 
     private LionBundle navLion;
 
-    protected int trafficRefreshMs = TRAFFIC_REFRESH_MS_DEFAULT;
 
     private String lionNavText(String id) {
         return navLion.getValue("nav_item_" + id);
@@ -300,7 +279,7 @@ public class UiExtensionManager
 
 
     @Activate
-    public void activate(ComponentContext context) {
+    public void activate() {
         Serializer serializer = Serializer.using(KryoNamespaces.API,
                      ObjectNode.class, ArrayNode.class,
                      JsonNodeFactory.class, LinkedHashMap.class,
@@ -322,7 +301,6 @@ public class UiExtensionManager
                 .withRelaxedReadConsistency()
                 .build();
         tokens = tokensConsistentMap.asJavaMap();
-        cfgService.registerProperties(getClass());
 
         register(core);
 
@@ -330,27 +308,12 @@ public class UiExtensionManager
     }
 
     @Deactivate
-    public void deactivate(ComponentContext context) {
-        cfgService.unregisterProperties(getClass(), false);
+    public void deactivate() {
         prefsConsistentMap.removeListener(prefsListener);
         eventHandlingExecutor.shutdown();
         UiWebSocketServlet.closeAll();
         unregister(core);
         log.info("Stopped");
-    }
-
-    @Modified
-    protected void modified(ComponentContext context) {
-        Dictionary<?, ?> properties = context.getProperties();
-        Integer trafficRefresh = Tools.getIntegerProperty(properties, TRAFFIC_REFRESH_MS);
-
-        if (trafficRefresh != null && trafficRefresh > 10) {
-            AbstractTopoMonitor.setTrafficPeriod(trafficRefresh);
-        } else if (trafficRefresh != null) {
-            log.warn("trafficRefresh must be greater than 10");
-        }
-
-        log.info("Settings: trafficRefresh={}", trafficRefresh);
     }
 
     @Override
@@ -403,22 +366,6 @@ public class UiExtensionManager
     }
 
     @Override
-    public synchronized void register(UiTopoHighlighterFactory factory) {
-        checkPermission(UI_WRITE);
-        if (!highlighterFactories.contains(factory)) {
-            highlighterFactories.add(factory);
-            UiWebSocketServlet.sendToAll(GUI_ADDED, null);
-        }
-    }
-
-    @Override
-    public synchronized void unregister(UiTopoHighlighterFactory factory) {
-        checkPermission(UI_WRITE);
-        highlighterFactories.remove(factory);
-        UiWebSocketServlet.sendToAll(GUI_REMOVED, null);
-    }
-
-    @Override
     public synchronized List<UiExtension> getExtensions() {
         checkPermission(UI_READ);
         return ImmutableList.copyOf(extensions);
@@ -428,12 +375,6 @@ public class UiExtensionManager
     public synchronized List<UiGlyph> getGlyphs() {
         checkPermission(GLYPH_READ);
         return ImmutableList.copyOf(glyphs);
-    }
-
-    @Override
-    public synchronized List<UiTopoHighlighterFactory> getTopoHighlighterFactories() {
-        checkPermission(UI_READ);
-        return ImmutableList.copyOf(highlighterFactories);
     }
 
     @Override

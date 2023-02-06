@@ -218,12 +218,6 @@ public final class EncodeInstructionCodecHelper {
                         (L3ModificationInstruction.ModIPv6FlowLabelInstruction) l3Instruction;
                 result.put(InstructionCodec.FLOW_LABEL, modFlowLabelInstruction.flowLabel());
                 break;
-            case IP_DSCP:
-                final L3ModificationInstruction.ModDscpInstruction
-                        modDscpInstruction =
-                        (L3ModificationInstruction.ModDscpInstruction) l3Instruction;
-                result.put(InstructionCodec.IP_DSCP, modDscpInstruction.dscp());
-                break;
             case TTL_IN:
             case TTL_OUT:
             case DEC_TTL:
@@ -289,7 +283,6 @@ public final class EncodeInstructionCodecHelper {
                 final PiActionProfileMemberId memberId = (PiActionProfileMemberId) piInstruction.action();
                 result.put(InstructionCodec.PI_ACTION_PROFILE_MEMBER_ID, memberId.id());
                 break;
-            //TODO: implement JSON encoder for ACTION_SET
             default:
                 throw new IllegalArgumentException("Cannot convert protocol-independent subtype of" +
                                                            piInstruction.action().type().name());
@@ -316,8 +309,6 @@ public final class EncodeInstructionCodecHelper {
         }
 
         if (device.is(ExtensionTreatmentCodec.class)) {
-            // for extension instructions, encoding device id is needed for the corresponding decoder
-            result.put("deviceId", deviceId.toString());
             ExtensionTreatmentCodec treatmentCodec = device.as(ExtensionTreatmentCodec.class);
             ObjectNode node = treatmentCodec.encode(extensionInstruction.extensionInstruction(), context);
             result.set(InstructionCodec.EXTENSION, node);

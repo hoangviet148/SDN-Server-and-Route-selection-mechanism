@@ -123,7 +123,6 @@ export class ForceSvgComponent implements OnInit, OnDestroy, OnChanges {
      * In some cases - have to remove the port number from the end of a device
      * name
      * @param endPtStr The end point name
-     * @param portStr The port name
      */
     static extractNodeName(endPtStr: string, portStr: string): string {
         if (portStr === undefined || endPtStr === undefined) {

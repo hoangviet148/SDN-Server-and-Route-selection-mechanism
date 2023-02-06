@@ -32,16 +32,15 @@ import org.onosproject.net.flow.criteria.EthCriterion;
 import org.onosproject.net.flow.criteria.PiCriterion;
 import org.onosproject.net.flow.criteria.PortCriterion;
 import org.onosproject.net.flow.criteria.VlanIdCriterion;
-import org.onosproject.net.flow.instructions.L2ModificationInstruction.L2SubType;
-import org.onosproject.net.flow.instructions.L2ModificationInstruction.ModVlanIdInstruction;
+import org.onosproject.net.flow.instructions.Instructions;
+import org.onosproject.net.flow.instructions.L2ModificationInstruction;
 import org.onosproject.net.flowobjective.FilteringObjective;
 import org.onosproject.net.flowobjective.Objective;
 import org.onosproject.net.flowobjective.ObjectiveError;
-import org.onosproject.net.pi.model.PiTableId;
 import org.onosproject.net.pi.runtime.PiAction;
 import org.onosproject.net.pi.runtime.PiActionParam;
 import org.onosproject.pipelines.fabric.impl.behaviour.FabricCapabilities;
-import org.onosproject.pipelines.fabric.FabricConstants;
+import org.onosproject.pipelines.fabric.impl.behaviour.FabricConstants;
 import org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils;
 
 import java.util.Collection;
@@ -50,23 +49,7 @@ import java.util.List;
 import static java.lang.String.format;
 import static org.onosproject.net.flow.criteria.Criterion.Type.INNER_VLAN_VID;
 import static org.onosproject.net.flow.criteria.Criterion.Type.VLAN_VID;
-import static org.onosproject.net.flow.instructions.L2ModificationInstruction.L2SubType.VLAN_ID;
-import static org.onosproject.net.flow.instructions.L2ModificationInstruction.L2SubType.VLAN_POP;
-import static org.onosproject.net.pi.model.PiPipelineInterpreter.PiInterpreterException;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.CLEANUP_DOUBLE_TAGGED_HOST_ENTRIES;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.ETH_TYPE_EXACT_MASK;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.FWD_MPLS;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.FWD_IPV4_ROUTING;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.FWD_IPV6_ROUTING;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.INTERFACE_CONFIG_UPDATE;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.ONE;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.ZERO;
-import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.isSrMetadataSet;
-import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.isValidSrMetadata;
-import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.portType;
-import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.l2InstructionOrFail;
 import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.criterion;
-import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.l2Instruction;
 
 /**
  * ObjectiveTranslator implementation for FilteringObjective.
@@ -74,9 +57,20 @@ import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.l2Inst
 class FilteringObjectiveTranslator
         extends AbstractObjectiveTranslator<FilteringObjective> {
 
+    // Forwarding types from fabric.p4.
+    static final byte FWD_MPLS = 1;
+    static final byte FWD_IPV4_ROUTING = 2;
+    static final byte FWD_IPV6_ROUTING = 3;
+
+    private static final byte[] ONE = new byte[]{1};
+    private static final byte[] ZERO = new byte[]{0};
+
+    private static final short ETH_TYPE_EXACT_MASK = (short) 0xFFFF;
+
     private static final PiAction DENY = PiAction.builder()
             .withId(FabricConstants.FABRIC_INGRESS_FILTERING_DENY)
             .build();
+
 
     FilteringObjectiveTranslator(DeviceId deviceId, FabricCapabilities capabilities) {
         super(deviceId, capabilities);
@@ -95,12 +89,6 @@ class FilteringObjectiveTranslator
                     ObjectiveError.BADPARAMS);
         }
 
-        if (!isValidSrMetadata(obj)) {
-            throw new FabricPipelinerException(
-                    format("Unsupported metadata configuration: metadata=%s", obj.meta()),
-                    ObjectiveError.BADPARAMS);
-        }
-
         final PortCriterion inPort = (PortCriterion) obj.key();
 
         final VlanIdCriterion outerVlan = (VlanIdCriterion) criterion(
@@ -113,7 +101,7 @@ class FilteringObjectiveTranslator
                 obj.conditions(), Criterion.Type.ETH_DST_MASKED);
 
         ingressPortVlanRule(obj, inPort, outerVlan, innerVlan, resultBuilder);
-        if (shouldModifyFwdClassifierTable(obj)) {
+        if (shouldAddFwdClassifierRule(obj)) {
             fwdClassifierRules(obj, inPort, ethDst, ethDstMasked, resultBuilder);
         } else {
             log.debug("Skipping fwd classifier rules for device {}.", deviceId);
@@ -121,30 +109,41 @@ class FilteringObjectiveTranslator
         return resultBuilder.build();
     }
 
-    private boolean shouldModifyFwdClassifierTable(FilteringObjective obj) {
+    private boolean shouldAddFwdClassifierRule(FilteringObjective obj) {
         // NOTE: in fabric pipeline the forwarding classifier acts similarly
         // to the TMAC table of OFDPA that matches on input port.
-        // NOTE: that SR signals when it is a port update event by not setting
-        // the INTERFACE_CONFIG_UPDATE metadata. During the INTERFACE_CONFIG_UPDATE
-        // there is no need to add/remove rules in the fwd_classifier table.
-        // NOTE: that in scenarios like (T, N) -> T where we remove only the native
-        // VLAN there is not an ADD following the remove.
 
-        // Forwarding classifier rules should be added/removed to translation when:
-        // - the operation is ADD
-        //     AND it is a port update event (ADD or UPDATE) OR
-        // - it doesn't refer to double tagged traffic
-        //     AND it is a port REMOVE event OR
+        // Forwarding classifier rules should be added to translation when:
+        // - the operation is ADD OR
+        // - it doesn't refer to double tagged traffic OR
         // - it refers to double tagged traffic
         //     and SR is triggering the removal of forwarding classifier rules.
-        return (obj.op() == Objective.Operation.ADD && !isSrMetadataSet(obj, INTERFACE_CONFIG_UPDATE)) ||
-                (!isDoubleTagged(obj) && !isSrMetadataSet(obj, INTERFACE_CONFIG_UPDATE)) ||
-                (isDoubleTagged(obj) && isSrMetadataSet(obj, CLEANUP_DOUBLE_TAGGED_HOST_ENTRIES));
+        return obj.op() == Objective.Operation.ADD ||
+                !isDoubleTagged(obj) ||
+                (isDoubleTagged(obj) && isLastDoubleTaggedForPort(obj));
+    }
+
+    /**
+     * Check if the given filtering objective is the last filtering objective
+     * for a double-tagged host for a specific port.
+     * <p>
+     * {@see org.onosproject.segmentrouting.RoutingRulePopulator#buildDoubleTaggedFilteringObj()}
+     * {@see org.onosproject.segmentrouting.RoutingRulePopulator#processDoubleTaggedFilter()}
+     *
+     * @param obj Filtering objective to check.
+     * @return True if SR is signaling to remove the forwarding classifier rule,
+     * false otherwise.
+     */
+    private boolean isLastDoubleTaggedForPort(FilteringObjective obj) {
+        Instructions.MetadataInstruction meta = obj.meta().writeMetadata();
+        // SR is setting this metadata when a double tagged filtering objective
+        // is removed and no other hosts is sharing the same input port.
+        return (meta != null && (meta.metadata() & meta.metadataMask()) == 1);
     }
 
     private boolean isDoubleTagged(FilteringObjective obj) {
         return obj.meta() != null &&
-                FabricUtils.l2Instruction(obj.meta(), L2SubType.VLAN_POP) != null &&
+                FabricUtils.l2Instruction(obj.meta(), L2ModificationInstruction.L2SubType.VLAN_POP) != null &&
                 FabricUtils.criterion(obj.conditions(), VLAN_VID) != null &&
                 FabricUtils.criterion(obj.conditions(), INNER_VLAN_VID) != null;
     }
@@ -182,63 +181,18 @@ class FilteringObjectiveTranslator
             selector.add(innerVlanCriterion);
         }
 
-        final TrafficTreatment.Builder treatmentBuilder = DefaultTrafficTreatment.builder();
+        final TrafficTreatment treatment;
         if (obj.type().equals(FilteringObjective.Type.DENY)) {
-            treatmentBuilder.piTableAction(DENY);
+            treatment = DefaultTrafficTreatment.builder()
+                    .piTableAction(DENY)
+                    .build();
         } else {
-            // FIXME SDFAB-52 to complete the work on metadata
-            Byte portType = portType(obj);
-            if (portType == null) {
-                throw new FabricPipelinerException(
-                        format("Unsupported port_type configuration: metadata=%s", obj.meta()),
-                        ObjectiveError.BADPARAMS);
-            }
-            try {
-                treatmentBuilder.piTableAction(mapFilteringTreatment(obj.meta(),
-                        FabricConstants.FABRIC_INGRESS_FILTERING_INGRESS_PORT_VLAN, portType));
-            } catch (PiInterpreterException ex) {
-                throw new FabricPipelinerException(format("Unable to map treatment for table '%s': %s",
-                        FabricConstants.FABRIC_INGRESS_FILTERING_INGRESS_PORT_VLAN,
-                        ex.getMessage()), ObjectiveError.UNSUPPORTED);
-            }
+            treatment = obj.meta() == null
+                    ? DefaultTrafficTreatment.emptyTreatment() : obj.meta();
         }
         resultBuilder.addFlowRule(flowRule(
                 obj, FabricConstants.FABRIC_INGRESS_FILTERING_INGRESS_PORT_VLAN,
-                selector.build(), treatmentBuilder.build()));
-    }
-
-    private PiAction mapFilteringTreatment(TrafficTreatment treatment, PiTableId tableId, byte portType)
-            throws PiInterpreterException {
-        if (treatment == null) {
-            treatment = DefaultTrafficTreatment.emptyTreatment();
-        }
-        // VLAN_POP action is equivalent to the permit action (VLANs pop is done anyway)
-        if (isFilteringNoAction(treatment) || isFilteringPopAction(treatment)) {
-            // Permit action if table is ingress_port_vlan;
-            return PiAction.builder()
-                    .withId(FabricConstants.FABRIC_INGRESS_FILTERING_PERMIT)
-                    .withParameter(new PiActionParam(FabricConstants.PORT_TYPE, portType))
-                    .build();
-        }
-
-        final ModVlanIdInstruction setVlanInst = (ModVlanIdInstruction) l2InstructionOrFail(
-                treatment, VLAN_ID, tableId);
-        return PiAction.builder()
-                .withId(FabricConstants.FABRIC_INGRESS_FILTERING_PERMIT_WITH_INTERNAL_VLAN)
-                .withParameter(new PiActionParam(FabricConstants.VLAN_ID, setVlanInst.vlanId().toShort()))
-                .withParameter(new PiActionParam(FabricConstants.PORT_TYPE, portType))
-                .build();
-    }
-
-    // NOTE: we use clearDeferred to signal when there are no more ports associated to a given vlan
-    private static boolean isFilteringNoAction(TrafficTreatment treatment) {
-        return treatment.equals(DefaultTrafficTreatment.emptyTreatment()) ||
-                (treatment.allInstructions().isEmpty()) ||
-                (treatment.allInstructions().size() == 1 && treatment.writeMetadata() != null);
-    }
-
-    private boolean isFilteringPopAction(TrafficTreatment treatment) {
-        return l2Instruction(treatment, VLAN_POP) != null;
+                selector.build(), treatment));
     }
 
     private void fwdClassifierRules(

@@ -67,26 +67,15 @@
 #define IP_VERSION_6 6
 #endif
 
-#define PACKET_OUT_HDR_SIZE 2
 #define ETH_HDR_SIZE 14
 #define IPV4_HDR_SIZE 20
 #define UDP_HDR_SIZE 8
 #define GTP_HDR_SIZE 8
 
-#define GTPU_OPTIONS_HDR_BYTES 4
-#define GTPU_EXT_PSC_HDR_BYTES 4
-
 #define UDP_PORT_GTPU 2152
 #define GTP_GPDU 0xff
-#define GTP_V1 0x01
+#define GTPU_VERSION 0x01
 #define GTP_PROTOCOL_TYPE_GTP 0x01
-#define GTPU_NEXT_EXT_NONE 0x0
-#define GTPU_NEXT_EXT_PSC 0x85
-// 1*4-octets
-#define GTPU_EXT_PSC_LEN 8w1
-
-const bit<4> GTPU_EXT_PSC_TYPE_DL = 4w0; // Downlink
-const bit<4> GTPU_EXT_PSC_TYPE_UL = 4w1; // Uplink
 
 #define PKT_INSTANCE_TYPE_NORMAL 0
 #define PKT_INSTANCE_TYPE_INGRESS_CLONE 1
@@ -105,12 +94,6 @@ typedef bit<16> mcast_group_id_t;
 typedef bit<12> vlan_id_t;
 typedef bit<32> ipv4_addr_t;
 typedef bit<16> l4_port_t;
-typedef bit<SLICE_ID_WIDTH> slice_id_t;
-typedef bit<TC_WIDTH> tc_t; // Traffic Class (for QoS) within a slice
-typedef bit<SLICE_TC_WIDTH> slice_tc_t; // Slice and TC identifier
-
-const slice_id_t DEFAULT_SLICE_ID = 0;
-const tc_t DEFAULT_TC = 0;
 
 // SPGW types
 typedef bit<2> direction_t;
@@ -121,25 +104,21 @@ typedef bit<32> pcc_rule_id_t;
 typedef bit<32> far_id_t;
 typedef bit<32> pdr_ctr_id_t;
 typedef bit<32> teid_t;
-typedef bit<6> qfi_t;
-typedef bit<5> qid_t;
 
 const spgw_interface_t SPGW_IFACE_UNKNOWN = 8w0;
 const spgw_interface_t SPGW_IFACE_ACCESS = 8w1;
 const spgw_interface_t SPGW_IFACE_CORE = 8w2;
-const spgw_interface_t SPGW_IFACE_FROM_DBUF = 8w3;
+const direction_t SPGW_DIR_UNKNOWN = 2w0;
+const direction_t SPGW_DIR_UPLINK = 2w1;
+const direction_t SPGW_DIR_DOWNLINK = 2w2;
 
-// PORT types. Set by the control plane using the actions
-// of the filtering.ingress_port_vlan table.
-typedef bit<2> port_type_t;
-// Default value. Set by deny action.
-const port_type_t PORT_TYPE_UNKNOWN = 0x0;
-// Host-facing port on a leaf switch.
-const port_type_t PORT_TYPE_EDGE = 0x1;
-// Switch-facing port on a leaf or spine switch.
-const port_type_t PORT_TYPE_INFRA = 0x2;
-// ASIC-internal port such as the recirculation one (used for INT or UE-to-UE).
-const port_type_t PORT_TYPE_INTERNAL = 0x3;
+#ifndef S1U_SGW_PREFIX
+// By default spgw.p4 expects uplink packets with IP dst matching 140.0.0.0/8
+// FIXME: refactor pipeline to remove dependency on this value or allow setting it at runtime
+//  (e.g. via parser value sets)
+#define S1U_SGW_PREFIX (8w140++8w0++8w0++8w0)
+#define S1U_SGW_PREFIX_LEN 8
+#endif
 
 const bit<16> ETHERTYPE_QINQ = 0x88A8;
 const bit<16> ETHERTYPE_QINQ_NON_STD = 0x9100;

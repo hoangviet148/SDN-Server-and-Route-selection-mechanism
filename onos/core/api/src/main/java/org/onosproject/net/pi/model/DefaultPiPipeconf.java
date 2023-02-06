@@ -192,25 +192,21 @@ public final class DefaultPiPipeconf implements PiPipeconf {
             Map<Class<? extends Behaviour>, Class<? extends Behaviour>> behaviours =
                     behaviourMapBuilder.build();
             return new DefaultPiPipeconf(
-                    id, pipelineModel, generateFingerprint(extensions),
+                    id, pipelineModel, generateFingerprint(extensions.values()),
                     behaviours, extensions);
         }
 
-        private long generateFingerprint(Map<ExtensionType, URL> extensions) {
+        private long generateFingerprint(Collection<URL> extensions) {
             Collection<Integer> hashes = new ArrayList<>();
-            for (ExtensionType extensionType : ExtensionType.values()) {
+            for (URL extUrl : extensions) {
                 try {
-                    // Get the extension if present and then hash the content
-                    URL extUrl = extensions.get(extensionType);
-                    if (extUrl != null) {
-                        HashingInputStream hin = new HashingInputStream(
-                                Hashing.crc32(), extUrl.openStream());
-                        //noinspection StatementWithEmptyBody
-                        while (hin.read() != -1) {
-                            // Do nothing. Reading all input stream to update hash.
-                        }
-                        hashes.add(hin.hash().asInt());
+                    HashingInputStream hin = new HashingInputStream(
+                            Hashing.crc32(), extUrl.openStream());
+                    //noinspection StatementWithEmptyBody
+                    while (hin.read() != -1) {
+                        // Do nothing. Reading all input stream to update hash.
                     }
+                    hashes.add(hin.hash().asInt());
                 } catch (IOException e) {
                     throw new IllegalArgumentException(e);
                 }

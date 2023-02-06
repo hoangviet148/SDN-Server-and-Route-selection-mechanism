@@ -9,21 +9,11 @@
       "items": {
         "type": "object",
         "required": [
-          "clusterName",
-          "segmentId",
           "scheme",
           "ipAddress",
           "port"
         ],
         "properties": {
-          "clusterName": {
-            "type": "string",
-            "example": "kubernetes"
-          },
-          "segmentId": {
-            "type": "integer",
-            "example": 1
-          },
           "scheme": {
             "type": "string",
             "example": "HTTP"

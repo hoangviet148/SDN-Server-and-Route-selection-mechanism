@@ -80,6 +80,9 @@ public class Topo2TrafficMessageHandler extends TopoologyTrafficMessageHandlerAb
     private static final String SRC = "src";
     private static final String DST = "dst";
 
+    // configuration parameters
+    private static final long TRAFFIC_PERIOD = 5000;
+
     protected ServicesBundle services;
     private static final String MY_APP_ID = "org.onosproject.gui";
     private ApplicationId appId;
@@ -93,14 +96,8 @@ public class Topo2TrafficMessageHandler extends TopoologyTrafficMessageHandlerAb
         super.init(connection, directory);
         appId = directory.get(CoreService.class).registerApplication(MY_APP_ID);
         services = new ServicesBundle(directory);
-        traffic2 = new Traffic2Monitor(services, this);
+        traffic2 = new Traffic2Monitor(TRAFFIC_PERIOD, services, this);
         topoSession = ((UiWebSocket) connection).topoSession();
-    }
-
-    @Override
-    public void destroy() {
-        super.destroy();
-        traffic2.stopMonitoring();
     }
 
     @Override

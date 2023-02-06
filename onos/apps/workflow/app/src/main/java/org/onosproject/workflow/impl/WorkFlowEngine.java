@@ -32,6 +32,8 @@ import org.onosproject.workflow.api.SystemWorkflowContext;
 import org.onosproject.workflow.api.EventTimeoutTask;
 import org.onosproject.workflow.api.TimeoutTask;
 import org.onosproject.workflow.api.TimerChain;
+import org.onosproject.workflow.api.TriggerWorklet;
+import org.onosproject.workflow.api.WorkflowEventMetaData;
 import org.onosproject.workflow.api.Worklet;
 import org.onosproject.workflow.api.Workflow;
 import org.onosproject.workflow.api.WorkflowContext;
@@ -51,7 +53,6 @@ import org.onosproject.workflow.api.WorkplaceStoreDelegate;
 import org.onosproject.workflow.api.WorkflowExecutionService;
 import org.onosproject.workflow.api.WorkletDescription;
 import org.onosproject.workflow.api.StaticDataModelInjector;
-import org.onosproject.workflow.api.WorkflowLoggerInjector;
 import org.onosproject.event.AbstractListenerManager;
 import org.onosproject.event.Event;
 import org.onosproject.net.intent.WorkPartitionService;
@@ -77,7 +78,6 @@ import static java.util.concurrent.Executors.newFixedThreadPool;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.workflow.api.CheckCondition.check;
 import static org.onosproject.workflow.api.WorkflowAttribute.REMOVE_AFTER_COMPLETE;
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -124,7 +124,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
     private static final int DEFAULT_WORKFLOW_THREADS = 12;
     private static final int DEFAULT_EVENTTASK_THREADS = 12;
     private static final int MAX_REGISTER_EVENTMAP_WAITS = 10;
-    private static final String ERROR = "ERROR";
 
     private ScheduledExecutorService eventMapTriggerExecutor;
 
@@ -132,7 +131,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
 
     private JsonDataModelInjector dataModelInjector = new JsonDataModelInjector();
     private StaticDataModelInjector staticDataModelInjector = new StaticDataModelInjector();
-    private WorkflowLoggerInjector workflowLoggerInjector = new WorkflowLoggerInjector();
 
     public static final String APPID = "org.onosproject.workflow";
     private ApplicationId appId;
@@ -181,7 +179,7 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
 
         Workflow workflow = workflowStore.get(context.workflowId());
         if (workflow == null) {
-            log.error("Invalid workflow id:{}", context.workflowId());
+            log.error("Invalid workflow {}", context.workflowId());
             return;
         }
 
@@ -193,7 +191,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
                 log.info("{} worklet.process:{}", context.name(), initWorklet.tag());
                 log.trace("{} context: {}", context.name(), context);
 
-                workflowLoggerInjector.inject(initWorklet, context);
                 dataModelInjector.inject(initWorklet, context);
                 initWorklet.process(context);
                 dataModelInjector.inhale(initWorklet, context);
@@ -201,9 +198,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
                 log.info("{} worklet.process(done): {}", context.name(), initWorklet.tag());
                 log.trace("{} context: {}", context.name(), context);
             }
-
-            check(workplaceStore.getContext(context.name()) == null,
-                    "Duplicated workflow context(" + context.name() + ") assignment.");
 
         } catch (WorkflowException e) {
             log.error("Exception: ", e);
@@ -238,7 +232,7 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
             return;
         }
 
-        Map<String, String> eventMap;
+        Map<String, WorkflowEventMetaData> eventMap;
 
         String eventHint;
         try {
@@ -247,6 +241,7 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
             log.error("Exception: ", e);
             return;
         }
+
         if (eventHint == null) {
             // do nothing
             log.error("Invalid eventHint, event: {}", event);
@@ -255,59 +250,87 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
 
         try {
             eventMap = eventMapStore.getEventMapByHint(event.getClass().getName(), eventHint);
-        } catch (WorkflowException e) {
-            log.error("Exception: ", e);
-            return;
-        }
-
-        if (Objects.isNull(eventMap) || eventMap.isEmpty()) {
-            // do nothing;
-            log.debug("Invalid eventMap, event: {}", event);
-            return;
-        }
-
-        for (Map.Entry<String, String> entry : eventMap.entrySet()) {
-            String contextName = entry.getKey();
-            String strProgramCounter = entry.getValue();
-            ProgramCounter pc;
-            try {
-                pc = ProgramCounter.valueOf(strProgramCounter);
-            } catch (IllegalArgumentException e) {
-                log.error("Exception: ", e);
+            if (Objects.isNull(eventMap) || eventMap.isEmpty()) {
+                // do nothing;
+                log.debug("Invalid eventMap, event: {}", event);
                 return;
             }
 
-            WorkflowContext context = workplaceStore.getContext(contextName);
-            if (Objects.isNull(context)) {
-                log.info("Invalid context: {}, event: {}", contextName, event);
-                continue;
-            }
-            EventTask eventtask = null;
-            try {
-                eventtask = EventTask.builder()
-                        .event(event)
-                        .eventHint(eventHint)
-                        .context(context)
-                        .programCounter(pc)
-                        .build();
-            } catch (WorkflowException e) {
-                log.error("Exception: ", e);
+            for (Map.Entry<String, WorkflowEventMetaData> entry : eventMap.entrySet()) {
+                String contextName = entry.getKey();
+                ProgramCounter pc = ProgramCounter.valueOf("INVALID_WORKLET", 0);
+                WorkflowContext context = null;
+
+                context = workplaceStore.getContext(contextName);
+
+                if (Objects.isNull(context)) {
+                    log.info("Invalid context: {}, event: {}", contextName, event);
+                    continue;
+                }
+
+                EventTask eventtask = null;
+                if (eventMapStore.isTriggerSet(event.getClass().getName(), eventHint, contextName)) {
+                    try {
+                        eventtask = EventTask.builder()
+                               .event(event)
+                               .eventHint(eventHint)
+                               .context(context)
+                               .programCounter(pc)
+                               .build();
+                    } catch (WorkflowException e) {
+                        log.error("Exception: ", e);
+                    }
+
+                    log.debug("eventtaskAccumulator.add: task: {}", eventtask);
+                    if (!Objects.isNull(eventtask)) {
+                        eventtaskAccumulator.add(eventtask);
+                    }
+                }
+                /*Both type of event is being scheduled here if applicable.
+                If worfklow trigger event is set but may not be a valid one for current event type,
+                then normal worklet event should be processed if applicable. But validity of workflow
+                trigger event would be checked later, so as of now both kind of event would be scheduled.
+                later while trigger event processing, its validity is found to be true, then worklet events
+                would be unregistered and eventually these events wont be processed.*/
+                if (eventMapStore.isEventMapPresent(contextName)) {
+                    try {
+                        pc = entry.getValue().getProgramCounter();
+                    } catch (IllegalArgumentException e) {
+                        log.error("Exception: ", e);
+                        continue;
+                    }
+                    try {
+                        eventtask = EventTask.builder()
+                               .event(event)
+                               .eventHint(eventHint)
+                               .context(context)
+                               .programCounter(pc)
+                               .build();
+                    } catch (WorkflowException e) {
+                        log.error("Exception: ", e);
+                    }
+
+                    log.debug("eventtaskAccumulator.add: task: {}", eventtask);
+                    if (!Objects.isNull(eventtask)) {
+                        eventtaskAccumulator.add(eventtask);
+                    }
+
+                }
             }
 
-            log.debug("eventtaskAccumulator.add: task: {}", eventtask);
-            if (!Objects.isNull(eventtask)) {
-                eventtaskAccumulator.add(eventtask);
-            }
+        } catch (WorkflowException we) {
+            log.error("Exception {} occured in fetching contexts for trigger event {}", we, event);
         }
     }
 
     @Override
     public void registerEventMap(Class<? extends Event> eventType, Set<String> eventHintSet,
-                                 String contextName, String programCounterString) throws WorkflowException {
-        eventMapStore.registerEventMap(eventType.getName(), eventHintSet, contextName, programCounterString);
+                                 String contextName, ProgramCounter programCounter) throws WorkflowException {
+        eventMapStore.registerEventMap(eventType.getName(), eventHintSet, contextName, programCounter);
         for (String eventHint : eventHintSet) {
             for (int i = 0; i < MAX_REGISTER_EVENTMAP_WAITS; i++) {
-                Map<String, String> eventMap = eventMapStore.getEventMapByHint(eventType.getName(), eventHint);
+                Map<String, WorkflowEventMetaData> eventMap =
+                        eventMapStore.getEventMapByHint(eventType.getName(), eventHint);
                 if (eventMap != null && eventMap.containsKey(contextName)) {
                     break;
                 }
@@ -427,6 +450,7 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
         context.setWorkflowExecutionService(this);
         context.setWorkflowStore(workflowStore);
         context.setWorkplaceStore(workplaceStore);
+        context.setEventMapStore(eventMapStore);
         context.waitCompletion(null, null, null, 0L);
         context.setTriggerNext(false);
     }
@@ -462,14 +486,39 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
      */
     private EventTask execEventTask(EventTask task) {
 
-        if (!eventMapStore.isEventMapPresent(task.context().name())) {
-            log.trace("EventMap doesnt exist for taskcontext:{}", task.context().name());
+        WorkflowContext context = (WorkflowContext) (task.context());
+        String cxtName = context.name();
+        try {
+            if (eventMapStore.isTriggerSet(task.event().getClass().getName(), task.eventHint(), cxtName)) {
+                WorkflowContext workflowContext = workplaceStore.getContext(cxtName);
+                Workflow workflow = workflowStore.get(workflowContext.workflowId());
+                String triggerWorkletName = workflow.getTriggerWorkletClassName().get();
+                Worklet worklet = workflow.getTriggerWorkletInstance(triggerWorkletName);
+                if (worklet instanceof TriggerWorklet) {
+                    if (((TriggerWorklet) worklet).isTriggerValid(workflowContext, task.event())) {
+                        if (Objects.nonNull(workflowContext.completionEventType())) {
+                            eventMapStore.unregisterEventMap(workflowContext.completionEventType().getName(),
+                                                             workflowContext.name());
+                        }
+                        initWorkletExecution(workflowContext);
+                        workflowContext.setCurrent(ProgramCounter.INIT_PC);
+                        workplaceStore.commitContext(cxtName, workflowContext, true);
+                    }
+                }
+            }
+
+        } catch (WorkflowException we) {
+            log.error("Error Occurred in validating trigger for eventType {} eventHint {} context name {}",
+                      task.eventType(), task.eventHint(), cxtName);
+        }
+
+        if (!eventMapStore.isEventMapPresent(cxtName)) {
+            log.trace("EventMap doesnt exist for taskcontext:{}", cxtName);
             return task;
         }
 
         log.debug("execEventTask- task: {}, hash: {}", task, stringHash(task.context().distributor()));
 
-        WorkflowContext context = (WorkflowContext) (task.context());
         Workflow workflow = workflowStore.get(context.workflowId());
         if (workflow == null) {
             log.error("Invalid workflow {}", context.workflowId());
@@ -500,7 +549,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
             log.info("{} worklet.isCompleted:{}", latestContext.name(), worklet.tag());
             log.trace("{} task:{}, context: {}", latestContext.name(), task, latestContext);
 
-            workflowLoggerInjector.inject(worklet, latestContext);
             dataModelInjector.inject(worklet, latestContext);
             boolean completed = worklet.isCompleted(latestContext, task.event());
             dataModelInjector.inhale(worklet, latestContext);
@@ -594,7 +642,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
             log.info("{} worklet.timeout(for event):{}", latestContext.name(), worklet.tag());
             log.trace("{} task:{}, context: {}", latestContext.name(), task, latestContext);
 
-            workflowLoggerInjector.inject(worklet, latestContext);
             dataModelInjector.inject(worklet, latestContext);
 
             WorkletDescription workletDesc = workflow.getWorkletDesc(task.programCounter());
@@ -672,7 +719,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
             log.info("{} worklet.timeout:{}", latestContext.name(), worklet.tag());
             log.trace("{} context: {}", latestContext.name(), latestContext);
 
-            workflowLoggerInjector.inject(worklet, latestContext);
             dataModelInjector.inject(worklet, latestContext);
 
             WorkletDescription workletDesc = workflow.getWorkletDesc(task.programCounter());
@@ -800,7 +846,6 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
             log.trace("{} context: {}", latestContext.name(), latestContext);
 
 
-            workflowLoggerInjector.inject(worklet, latestContext);
             dataModelInjector.inject(worklet, latestContext);
 
             WorkletDescription workletDesc = workflow.getWorkletDesc(pc);
@@ -825,8 +870,7 @@ public class WorkFlowEngine extends AbstractListenerManager<WorkflowDataEvent, W
                 }
 
                 registerEventMap(latestContext.completionEventType(), latestContext.completionEventHints(),
-                        latestContext.name(), pc.toString());
-
+                        latestContext.name(), pc);
                 latestContext.completionEventGenerator().apply();
 
                 if (latestContext.completionEventTimeout() != 0L) {

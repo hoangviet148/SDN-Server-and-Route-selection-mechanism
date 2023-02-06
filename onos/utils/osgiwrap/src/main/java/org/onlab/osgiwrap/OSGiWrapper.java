@@ -26,12 +26,13 @@ import aQute.bnd.osgi.Resource;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.io.ByteStreams;
+import org.apache.felix.scrplugin.bnd.SCRDescriptorBndPlugin;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
@@ -47,7 +48,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
-import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 
 import static com.google.common.io.Files.createParentDirs;
@@ -55,14 +55,9 @@ import static com.google.common.io.Files.write;
 import static java.nio.file.Files.walkFileTree;
 
 /**
- * BND-based wrapper to convert Buck/Bazel JARs to OSGi-compatible JARs.
+ * BND-based wrapper to convert Buck JARs to OSGi-compatible JARs.
  */
 public class OSGiWrapper {
-    // Resources that need to be modified in the original jar
-    private static final String _CFGDEF_JAR = "_cfgdef.jar";
-    private static final String MODEL_SRCJAR = "model.srcjar";
-    private static final String SCHEMA_JAR = "schema.jar";
-
     private static final String NONE = "NONE";
 
     private String inputJar;
@@ -91,12 +86,9 @@ public class OSGiWrapper {
     private String bundleClasspath;
     private String karafCommands;
 
-    private String fragmentHost;
-    private boolean debug;
-
     // FIXME should consider using Commons CLI, etc.
     public static void main(String[] args) {
-        if (args.length < 18) {
+        if (args.length < 14) {
             System.err.println("Not enough args");
             System.exit(1);
         }
@@ -117,9 +109,7 @@ public class OSGiWrapper {
         String destdir = args[13];
         String bundleClasspath = args[14];
         String karafCommands = args[15];
-        String fragmentHost = args[16];
-        String debug = args[17];
-        String desc = Joiner.on(' ').join(Arrays.copyOfRange(args, 18, args.length));
+        String desc = Joiner.on(' ').join(Arrays.copyOfRange(args, 12, args.length));
 
         OSGiWrapper wrapper = new OSGiWrapper(jar, output, cp,
                 name, group,
@@ -132,9 +122,7 @@ public class OSGiWrapper {
                 desc,
                 destdir,
                 bundleClasspath,
-                karafCommands,
-                fragmentHost,
-                debug);
+                karafCommands);
         wrapper.log(wrapper + "\n");
         if (!wrapper.execute()) {
             System.err.printf("Error generating %s\n", name);
@@ -159,9 +147,7 @@ public class OSGiWrapper {
                        String bundleDescription,
                        String destdir,
                        String bundleClasspath,
-                       String karafCommands,
-                       String fragmentHost,
-                       String debug) {
+                       String karafCommands) {
         this.inputJar = inputJar;
         this.classpath = Lists.newArrayList(classpath.split(":"));
         if (!this.classpath.contains(inputJar)) {
@@ -193,9 +179,6 @@ public class OSGiWrapper {
 
         this.bundleClasspath = bundleClasspath;
         this.karafCommands = karafCommands;
-
-        this.fragmentHost = fragmentHost;
-        this.debug = Boolean.parseBoolean(debug);
     }
 
     private void setProperties(Analyzer analyzer) {
@@ -231,15 +214,13 @@ public class OSGiWrapper {
                     ",org.glassfish.jersey.servlet,org.jvnet.mimepull\n");
         }
         analyzer.setProperty("Karaf-Commands", karafCommands);
-
-        analyzer.setProperty(Analyzer.FRAGMENT_HOST, fragmentHost);
     }
 
     public boolean execute() {
         Analyzer analyzer = new Builder();
         try {
-            // Sanitize the input jar content
-            inputJar = modifyJar(inputJar);
+            // Extract the input jar contents into the specified output directory
+            expandJar(inputJar, new File(destdir));
 
             Jar jar = new Jar(new File(inputJar));  // where our data is
             analyzer.setJar(jar);                   // give bnd the contents
@@ -255,6 +236,15 @@ public class OSGiWrapper {
 
             // Analyze the target JAR first
             analyzer.analyze();
+
+            //// Scan the JAR for Felix SCR annotations and generate XML files
+            //Map<String, String> properties = Maps.newHashMap();
+            //// destdir hack
+            //properties.put("destdir", destdir);
+            //SCRDescriptorBndPlugin scrDescriptorBndPlugin = new SCRDescriptorBndPlugin();
+            //scrDescriptorBndPlugin.setProperties(properties);
+            //scrDescriptorBndPlugin.setReporter(analyzer);
+            //scrDescriptorBndPlugin.analyzeJar(analyzer);
 
             if (includeResources != null) {
                 doIncludeResources(analyzer);
@@ -288,64 +278,24 @@ public class OSGiWrapper {
         }
     }
 
-    // Extract the jar and melds its content with the jar produced by Bazel
-    private void addJarToJar(JarEntry entryJar, JarInputStream jis, JarOutputStream jos) throws IOException {
-        File file = new File(new File(destdir), entryJar.getName());
-        byte[] data = ByteStreams.toByteArray(jis);
-        createParentDirs(file);
-        write(data, file);
-        // Entry jar input stream which points to the inner jar resources (cfgdef, model,...)
-        try (JarInputStream innerJis = new JarInputStream(new FileInputStream(file))) {
+    // Expands the specified jar file into the given directory
+    private void expandJar(String inputJar, File intoDir) throws IOException {
+        try (JarInputStream jis = new JarInputStream(new FileInputStream(inputJar))) {
             JarEntry entry;
-            byte[] byteBuff = new byte[1024];
-            while ((entry = innerJis.getNextJarEntry()) != null) {
-                if (!entry.isDirectory()) {
-                    if (!entry.getName().contains("..")) {
-                        jos.putNextEntry(entry);
-                        for (int bytesRead; (bytesRead = innerJis.read(byteBuff)) != -1; ) {
-                            jos.write(byteBuff, 0, bytesRead);
-                        }
-                    } else {
-                        throw new IOException("Jar " + entryJar + " is corrupted");
-                    }
-                }
-                innerJis.closeEntry();
-            }
-        }
-    }
-
-    // Modify the specified jar to fix the resource_jars loaded by Bazel.
-    // Starting from Bazel 5, resource_jars are no longer supported and
-    // we have to load them as resources. This means that we expand them
-    // and we set the right path in OSGi-compatible JAR.
-    private String modifyJar(String inputJar) throws IOException {
-        // libonos-xxx input and libonos-xxx-new which is the sanitized final jar
-        try (JarInputStream jis = new JarInputStream(new FileInputStream(inputJar));
-             JarOutputStream jos = new JarOutputStream(new FileOutputStream(inputJar + "new"))) {
-            JarEntry entry;
-            byte[] byteBuff = new byte[1024];
             while ((entry = jis.getNextJarEntry()) != null) {
                 if (!entry.isDirectory()) {
+                    byte[] data = ByteStreams.toByteArray(jis);
+                    jis.closeEntry();
                     if (!entry.getName().contains("..")) {
-                        // We add the content but we don't write them again in the new jar
-                        if (entry.getName().contains(bundleName + OSGiWrapper._CFGDEF_JAR) ||
-                                entry.getName().contains(SCHEMA_JAR) ||
-                                entry.getName().contains(MODEL_SRCJAR)) {
-                            addJarToJar(entry, jis, jos);
-                        } else {
-                            jos.putNextEntry(entry);
-                            for (int bytesRead; (bytesRead = jis.read(byteBuff)) != -1; ) {
-                                jos.write(byteBuff, 0, bytesRead);
-                            }
-                        }
+                        File file = new File(intoDir, entry.getName());
+                        createParentDirs(file);
+                        write(data, file);
                     } else {
-                        throw new IOException("Jar " + inputJar + " is corrupted");
+                        throw new IOException("Corrupt jar file");
                     }
                 }
-                jis.closeEntry();
             }
         }
-        return inputJar + "new";
     }
 
     private boolean isWab() {
@@ -440,10 +390,10 @@ public class OSGiWrapper {
         }
     }
 
-    private void addFileToJar(Jar jar, String destination, String sourceAbsPath) throws IOException {
+    private boolean addFileToJar(Jar jar, String destination, String sourceAbsPath) throws IOException {
         if (includedResources.contains(sourceAbsPath)) {
             log("Skipping already included resource: %s\n", sourceAbsPath);
-            return;
+            return false;
         }
         File file = new File(sourceAbsPath);
         if (!file.isFile()) {
@@ -453,17 +403,16 @@ public class OSGiWrapper {
         Resource resource = new FileResource(file);
         if (jar.getResource(destination) != null) {
             warn("Skipping duplicate resource: %s\n", destination);
-            return;
+            return false;
         }
         jar.putResource(destination, resource);
         includedResources.add(sourceAbsPath);
         log("Adding resource: %s\n", destination);
+        return true;
     }
 
     private void log(String format, Object... objects) {
-        if (debug) {
-            System.out.printf(format, objects);
-        }
+        //System.err.printf(format, objects);
     }
 
     private void warn(String format, Object... objects) {

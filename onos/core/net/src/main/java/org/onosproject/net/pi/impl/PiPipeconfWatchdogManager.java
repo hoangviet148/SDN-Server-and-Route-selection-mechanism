@@ -18,8 +18,8 @@ package org.onosproject.net.pi.impl;
 
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.Striped;
 import org.onlab.util.KryoNamespace;
-import org.onlab.util.PredictableExecutor;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.event.AbstractListenerManager;
@@ -42,14 +42,10 @@ import org.onosproject.net.pi.service.PiPipeconfService;
 import org.onosproject.net.pi.service.PiPipeconfWatchdogEvent;
 import org.onosproject.net.pi.service.PiPipeconfWatchdogListener;
 import org.onosproject.net.pi.service.PiPipeconfWatchdogService;
-import org.onosproject.store.primitives.DefaultDistributedSet;
 import org.onosproject.store.serializers.KryoNamespaces;
-import org.onosproject.store.service.DistributedPrimitive;
-import org.onosproject.store.service.DistributedSet;
 import org.onosproject.store.service.EventuallyConsistentMap;
 import org.onosproject.store.service.EventuallyConsistentMapEvent;
 import org.onosproject.store.service.EventuallyConsistentMapListener;
-import org.onosproject.store.service.Serializer;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.WallClockTimestamp;
 import org.osgi.service.component.ComponentContext;
@@ -64,12 +60,13 @@ import org.slf4j.Logger;
 import java.util.Dictionary;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.locks.Lock;
 
 import static java.util.Collections.singleton;
-import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.net.OsgiPropertyConstants.PWM_PROBE_INTERVAL;
 import static org.onosproject.net.OsgiPropertyConstants.PWM_PROBE_INTERVAL_DEFAULT;
@@ -92,6 +89,8 @@ public class PiPipeconfWatchdogManager
         implements PiPipeconfWatchdogService {
 
     private final Logger log = getLogger(getClass());
+
+    private static final long SECONDS = 1000L;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private PiPipeconfMappingStore pipeconfMappingStore;
@@ -116,35 +115,25 @@ public class PiPipeconfWatchdogManager
      */
     private int probeInterval = PWM_PROBE_INTERVAL_DEFAULT;
 
-    // Setting to 0 will leverage available processors
-    private static final int DEFAULT_THREADS = 0;
-    protected PredictableExecutor watchdogWorkers = new PredictableExecutor(DEFAULT_THREADS,
-            groupedThreads("onos/pipeconf-watchdog", "%d", log));
+    protected ExecutorService executor = Executors.newFixedThreadPool(
+            30, groupedThreads("onos/pipeconf-watchdog", "%d", log));
 
     private final DeviceListener deviceListener = new InternalDeviceListener();
     private final PiPipeconfListener pipeconfListener = new InternalPipeconfListener();
 
-    private ScheduledExecutorService eventExecutor = newSingleThreadScheduledExecutor(
-            groupedThreads("onos/pipeconf-event", "%d", log));
-    private ScheduledFuture<?> poller = null;
+    private Timer timer;
+    private TimerTask task;
+
+    private final Striped<Lock> locks = Striped.lock(30);
 
     private EventuallyConsistentMap<DeviceId, PipelineStatus> statusMap;
     private Map<DeviceId, PipelineStatus> localStatusMap;
-
-    // Configured devices by this cluster. We use a set to keep track of all devices for which
-    // we have pushed the forwarding pipeline config at least once. This guarantees that device
-    // pipelines are wiped out/reset at least once when starting the cluster, minimizing the risk
-    // of any stale state from previous runs affecting control operations. Another effect of this
-    // approach is that the default entries mirror will get populated even though the pipeline results
-    // to be the same across different ONOS installations.
-    private static final String CONFIGURED_DEVICES = "onos-pipeconf-configured-set";
-    private DistributedSet<DeviceId> configuredDevices;
 
     @Activate
     public void activate() {
         eventDispatcher.addSink(PiPipeconfWatchdogEvent.class, listenerRegistry);
         localStatusMap = Maps.newConcurrentMap();
-        // Init distributed status map and configured devices set
+        // Init distributed status map.
         KryoNamespace.Builder serializer = KryoNamespace.newBuilder()
                 .register(KryoNamespaces.API)
                 .register(PipelineStatus.class);
@@ -153,15 +142,10 @@ public class PiPipeconfWatchdogManager
                 .withSerializer(serializer)
                 .withTimestampProvider((k, v) -> new WallClockTimestamp()).build();
         statusMap.addListener(new StatusMapListener());
-        // Init the set of the configured devices
-        configuredDevices = new DefaultDistributedSet<>(storageService.<DeviceId>setBuilder()
-                .withName(CONFIGURED_DEVICES)
-                .withSerializer(Serializer.using(KryoNamespaces.API))
-                .build(),
-                DistributedPrimitive.DEFAULT_OPERATION_TIMEOUT_MILLIS);
         // Register component configurable properties.
         componentConfigService.registerProperties(getClass());
         // Start periodic watchdog task.
+        timer = new Timer();
         startProbeTask();
         // Add listeners.
         deviceService.addListener(deviceListener);
@@ -193,8 +177,7 @@ public class PiPipeconfWatchdogManager
         pipeconfService.removeListener(pipeconfListener);
         deviceService.removeListener(deviceListener);
         stopProbeTask();
-        eventExecutor.shutdown();
-        watchdogWorkers.shutdown();
+        timer = null;
         statusMap = null;
         localStatusMap = null;
         log.info("Stopped");
@@ -219,55 +202,39 @@ public class PiPipeconfWatchdogManager
     }
 
     private void filterAndTriggerTasks(Iterable<Device> devices) {
-        devices.forEach(device -> watchdogWorkers.execute(() -> probeTask(device), device.id().hashCode()));
-    }
-
-    private void probeTask(Device device) {
-        if (!isLocalMaster(device)) {
-            return;
-        }
-
-        final PiPipeconfId pipeconfId = pipeconfMappingStore.getPipeconfId(device.id());
-        if (pipeconfId == null || !device.is(PiPipelineProgrammable.class)) {
-            return;
-        }
-
-        if (pipeconfService.getPipeconf(pipeconfId).isEmpty()) {
-            log.warn("Pipeconf {} is not registered, skipping probe for {}",
-                    pipeconfId, device.id());
-            return;
-        }
-
-        final PiPipeconf pipeconf = pipeconfService.getPipeconf(pipeconfId).get();
-
-        if (!device.is(DeviceHandshaker.class)) {
-            log.error("Missing DeviceHandshaker behavior for {}", device.id());
-            return;
-        }
-
-        final boolean success = doSetPipeconfIfRequired(device, pipeconf);
-        // The probe task is not performed in atomic way and between the
-        // initial mastership check and the actual probe the execution
-        // can be blocked many times and the mastership can change. Recheck
-        // the mastership after pipeline probe returns.
-        if (isLocalMaster(device)) {
-            // An harmless side effect of the check above is that when we return
-            // from the set pipeline config we might be no longer the master and this
-            // will delay in the worst case the mark online of the device for 15s
-            // (next reconcile interval)
-            if (success) {
-                signalStatusReady(device.id());
-                signalStatusConfigured(device.id());
-            } else {
-                // When a network partition occurs watchdog is stuck for LONG_TIMEOUT
-                // before returning and will mark the device offline. However, in the
-                // meanwhile the mastership has been passed to another instance which is
-                // already connected and has already marked the device online.
-                signalStatusUnknown(device.id());
+        devices.forEach(device -> {
+            if (!isLocalMaster(device)) {
+                return;
             }
-        } else {
-            log.warn("No longer the master for {} aborting probe task", device.id());
-        }
+
+            final PiPipeconfId pipeconfId = pipeconfMappingStore.getPipeconfId(device.id());
+            if (pipeconfId == null || !device.is(PiPipelineProgrammable.class)) {
+                return;
+            }
+
+            if (!pipeconfService.getPipeconf(pipeconfId).isPresent()) {
+                log.warn("Pipeconf {} is not registered, skipping probe for {}",
+                         pipeconfId, device.id());
+                return;
+            }
+
+            final PiPipeconf pipeconf = pipeconfService.getPipeconf(pipeconfId).get();
+
+            if (!device.is(DeviceHandshaker.class)) {
+                log.error("Missing DeviceHandshaker behavior for {}", device.id());
+                return;
+            }
+
+            // Trigger task with per-device lock.
+            executor.execute(withLock(() -> {
+                final boolean success = doSetPipeconfIfRequired(device, pipeconf);
+                if (success) {
+                    signalStatusReady(device.id());
+                } else {
+                    signalStatusUnknown(device.id());
+                }
+            }, device.id()));
+        });
     }
 
     /**
@@ -284,16 +251,26 @@ public class PiPipeconfWatchdogManager
         final PiPipelineProgrammable pipelineProg = device.as(PiPipelineProgrammable.class);
         final DeviceHandshaker handshaker = device.as(DeviceHandshaker.class);
         if (!handshaker.hasConnection()) {
-            log.warn("There is no connectivity with {}", device.id());
             return false;
         }
-        if (Futures.getUnchecked(pipelineProg.isPipeconfSet(pipeconf)) &&
-                configuredDevices.contains(device.id())) {
+        if (Futures.getUnchecked(pipelineProg.isPipeconfSet(pipeconf))) {
             log.debug("Pipeconf {} already configured on {}",
                       pipeconf.id(), device.id());
             return true;
         }
         return Futures.getUnchecked(pipelineProg.setPipeconf(pipeconf));
+    }
+
+    private Runnable withLock(Runnable task, Object object) {
+        return () -> {
+            final Lock lock = locks.get(object);
+            lock.lock();
+            try {
+                task.run();
+            } finally {
+                lock.unlock();
+            }
+        };
     }
 
     private void signalStatusUnknown(DeviceId deviceId) {
@@ -302,14 +279,6 @@ public class PiPipeconfWatchdogManager
 
     private void signalStatusReady(DeviceId deviceId) {
         statusMap.put(deviceId, PipelineStatus.READY);
-    }
-
-    private void signalStatusUnconfigured(DeviceId deviceId) {
-        configuredDevices.remove(deviceId);
-    }
-
-    private void signalStatusConfigured(DeviceId deviceId) {
-        configuredDevices.add(deviceId);
     }
 
     private boolean isLocalMaster(Device device) {
@@ -328,8 +297,9 @@ public class PiPipeconfWatchdogManager
     private void startProbeTask() {
         synchronized (this) {
             log.info("Starting pipeline probe thread with {} seconds interval...", probeInterval);
-            poller = eventExecutor.scheduleAtFixedRate(this::triggerCheckAllDevices, probeInterval,
-                    probeInterval, TimeUnit.SECONDS);
+            task = new InternalTimerTask();
+            timer.scheduleAtFixedRate(task, probeInterval * SECONDS,
+                                      probeInterval * SECONDS);
         }
     }
 
@@ -337,8 +307,8 @@ public class PiPipeconfWatchdogManager
     private void stopProbeTask() {
         synchronized (this) {
             log.info("Stopping pipeline probe thread...");
-            poller.cancel(false);
-            poller = null;
+            task.cancel();
+            task = null;
         }
     }
 
@@ -350,6 +320,13 @@ public class PiPipeconfWatchdogManager
         }
     }
 
+    private class InternalTimerTask extends TimerTask {
+        @Override
+        public void run() {
+            triggerCheckAllDevices();
+        }
+    }
+
     /**
      * Listener of device events used to update the pipeline status.
      */
@@ -357,48 +334,47 @@ public class PiPipeconfWatchdogManager
 
         @Override
         public void event(DeviceEvent event) {
-            eventExecutor.execute(() -> {
-                final Device device = event.subject();
-                switch (event.type()) {
-                    case DEVICE_ADDED:
-                    case DEVICE_UPDATED:
-                    case DEVICE_AVAILABILITY_CHANGED:
-                        // The GeneralDeviceProvider marks online/offline devices that
-                        // have/have not ANY pipeline config set. Here we make sure the
-                        // one configured in the pipeconf service is the expected one.
-                        // Clearly, it would be better to let the GDP do this check and
-                        // avoid sending twice the same message to the switch.
-                        if (!deviceService.isAvailable(device.id())) {
-                            signalStatusUnknown(device.id());
-                        } else {
-                            filterAndTriggerTasks(singleton(device));
-                        }
-                        break;
-                    case DEVICE_REMOVED:
-                    case DEVICE_SUSPENDED:
+            final Device device = event.subject();
+            switch (event.type()) {
+                case DEVICE_ADDED:
+                case DEVICE_UPDATED:
+                case DEVICE_AVAILABILITY_CHANGED:
+                    if (!deviceService.isAvailable(device.id())) {
                         signalStatusUnknown(device.id());
-                        signalStatusUnconfigured(device.id());
-                        break;
-                    case PORT_ADDED:
-                    case PORT_UPDATED:
-                    case PORT_REMOVED:
-                    case PORT_STATS_UPDATED:
-                    default:
-                        break;
-                }
-            });
+                    } else {
+                        // The GeneralDeviceProvider marks online devices that
+                        // have ANY pipeline config set. Here we make sure the
+                        // one configured in the pipeconf service is the
+                        // expected one. Clearly, it would be better to let the
+                        // GDP do this check and avoid sending twice the same
+                        // message to the switch.
+                        filterAndTriggerTasks(singleton(device));
+                    }
+                    break;
+                case DEVICE_REMOVED:
+                case DEVICE_SUSPENDED:
+                    signalStatusUnknown(device.id());
+                    break;
+                case PORT_ADDED:
+                case PORT_UPDATED:
+                case PORT_REMOVED:
+                case PORT_STATS_UPDATED:
+                default:
+                    break;
+            }
         }
     }
 
     private class InternalPipeconfListener implements PiPipeconfListener {
         @Override
         public void event(PiPipeconfEvent event) {
-            eventExecutor.execute(() -> {
-                if (Objects.equals(event.type(), PiPipeconfEvent.Type.REGISTERED)) {
-                    pipeconfMappingStore.getDevices(event.subject())
-                            .forEach(PiPipeconfWatchdogManager.this::triggerProbe);
-                }
-            });
+            pipeconfMappingStore.getDevices(event.subject())
+                    .forEach(PiPipeconfWatchdogManager.this::triggerProbe);
+        }
+
+        @Override
+        public boolean isRelevant(PiPipeconfEvent event) {
+            return Objects.equals(event.type(), PiPipeconfEvent.Type.REGISTERED);
         }
     }
 

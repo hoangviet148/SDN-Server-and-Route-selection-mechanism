@@ -20,12 +20,9 @@
 #include "include/size.p4"
 #include "include/control/filtering.p4"
 #include "include/control/forwarding.p4"
-#include "include/control/pre_next.p4"
 #include "include/control/acl.p4"
 #include "include/control/next.p4"
 #include "include/control/packetio.p4"
-#include "include/control/lookup_md_init.p4"
-#include "include/control/slicing.p4"
 #include "include/header.p4"
 #include "include/checksum.p4"
 #include "include/parser.p4"
@@ -50,38 +47,27 @@ control FabricIngress (inout parsed_headers_t hdr,
                        inout fabric_metadata_t fabric_metadata,
                        inout standard_metadata_t standard_metadata) {
 
-    LookupMdInit() lkp_md_init;
     PacketIoIngress() pkt_io_ingress;
     Filtering() filtering;
     Forwarding() forwarding;
-    PreNext() pre_next;
     Acl() acl;
     Next() next;
-    IngressSliceTcClassifier() slice_tc_classifier;
-    IngressQos() qos;
 #ifdef WITH_PORT_COUNTER
     PortCountersControl() port_counters_control;
 #endif // WITH_PORT_COUNTER
 #ifdef WITH_SPGW
-    SpgwIngress() spgw;
+    SpgwIngress() spgw_ingress;
 #endif // WITH_SPGW
 
     apply {
         _PRE_INGRESS
-        lkp_md_init.apply(hdr, fabric_metadata.lkp);
         pkt_io_ingress.apply(hdr, fabric_metadata, standard_metadata);
-        slice_tc_classifier.apply(hdr, fabric_metadata, standard_metadata);
-        filtering.apply(hdr, fabric_metadata, standard_metadata);
 #ifdef WITH_SPGW
-        if (fabric_metadata.skip_forwarding == _FALSE) {
-            spgw.apply(hdr, fabric_metadata, standard_metadata);
-        }
+        spgw_ingress.apply(hdr, fabric_metadata, standard_metadata);
 #endif // WITH_SPGW
+        filtering.apply(hdr, fabric_metadata, standard_metadata);
         if (fabric_metadata.skip_forwarding == _FALSE) {
             forwarding.apply(hdr, fabric_metadata, standard_metadata);
-        }
-        if (fabric_metadata.skip_next == _FALSE) {
-            pre_next.apply(hdr, fabric_metadata);
         }
         acl.apply(hdr, fabric_metadata, standard_metadata);
         if (fabric_metadata.skip_next == _FALSE) {
@@ -98,7 +84,7 @@ control FabricIngress (inout parsed_headers_t hdr,
 #ifdef WITH_BNG
         bng_ingress.apply(hdr, fabric_metadata, standard_metadata);
 #endif // WITH_BNG
-        qos.apply(fabric_metadata, standard_metadata);
+
     }
 }
 
@@ -108,9 +94,8 @@ control FabricEgress (inout parsed_headers_t hdr,
 
     PacketIoEgress() pkt_io_egress;
     EgressNextControl() egress_next;
-    EgressDscpRewriter() dscp_rewriter;
 #ifdef WITH_SPGW
-    SpgwEgress() spgw;
+    SpgwEgress() spgw_egress;
 #endif // WITH_SPGW
 
     apply {
@@ -118,7 +103,7 @@ control FabricEgress (inout parsed_headers_t hdr,
         pkt_io_egress.apply(hdr, fabric_metadata, standard_metadata);
         egress_next.apply(hdr, fabric_metadata, standard_metadata);
 #ifdef WITH_SPGW
-        spgw.apply(hdr, fabric_metadata);
+        spgw_egress.apply(hdr, fabric_metadata);
 #endif // WITH_SPGW
 #ifdef WITH_BNG
         bng_egress.apply(hdr, fabric_metadata, standard_metadata);
@@ -126,7 +111,6 @@ control FabricEgress (inout parsed_headers_t hdr,
 #ifdef WITH_INT
         process_int_main.apply(hdr, fabric_metadata, standard_metadata);
 #endif
-    dscp_rewriter.apply(hdr, fabric_metadata, standard_metadata);
     }
 }
 

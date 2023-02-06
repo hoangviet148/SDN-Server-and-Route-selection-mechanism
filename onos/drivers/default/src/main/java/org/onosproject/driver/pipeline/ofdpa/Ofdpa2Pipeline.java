@@ -251,18 +251,6 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
     }
 
     /**
-     * Determines whether this pipeline requires second VLAN entry in VLAN table.
-     * OF-DPA hardware requires one VLAN filtering rule and one VLAN assignment
-     * flow in the VLAN table in the case of untagged packets. Software emulations
-     * just use one flow.
-     *
-     * @return true if required
-     */
-    public boolean requireSecondVlanTableEntry() {
-        return true;
-    }
-
-    /**
      * Determines whether in-port should be matched on in TMAC table rules.
      *
      * @return true if match on in-port should be programmed
@@ -475,12 +463,6 @@ public class Ofdpa2Pipeline extends AbstractHandlerBehaviour implements Pipeline
         default:
             log.warn("Unsupported operation {}", nextObjective.op());
         }
-    }
-
-    @Override
-    public void purgeAll(ApplicationId appId) {
-        flowRuleService.purgeFlowRules(deviceId, appId);
-        groupService.purgeGroupEntries(deviceId, appId);
     }
 
     //////////////////////////////////////

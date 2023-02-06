@@ -105,14 +105,4 @@ public interface DeviceProviderService extends ProviderService<DeviceProvider> {
      */
     void updatePortStatistics(DeviceId deviceId, Collection<PortStatistics> portStatistics);
 
-    /**
-     * Returns the specified device description.
-     *
-     * @param deviceId device identifier
-     * @return device description or null if not present
-     */
-    default DeviceDescription getDeviceDescription(DeviceId deviceId) {
-        return null;
-    }
-
 }

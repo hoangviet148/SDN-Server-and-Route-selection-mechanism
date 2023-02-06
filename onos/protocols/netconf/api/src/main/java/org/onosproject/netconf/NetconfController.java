@@ -141,18 +141,6 @@ public interface NetconfController {
     }
 
     /**
-     * If master, will execute the call locally else will use
-     * clusterCommunicationManager to execute at master controller.
-     * Meant only for internal synchronization and not to be used by applications.
-     *
-     * @param deviceId deviceId of device
-     * @return true or false
-     */
-    default boolean pingDevice(DeviceId deviceId) {
-        return false;
-    }
-
-    /**
      * Get a contoller node Id .
      *
      * @return controller node Id

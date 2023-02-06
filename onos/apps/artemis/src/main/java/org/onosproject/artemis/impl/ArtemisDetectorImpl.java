@@ -16,8 +16,10 @@
 
 package org.onosproject.artemis.impl;
 
-import com.eclipsesource.json.JsonObject;
-import com.eclipsesource.json.JsonArray;
+import org.apache.commons.lang.exception.ExceptionUtils;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.onlab.packet.IpPrefix;
 import org.onosproject.artemis.ArtemisDetector;
 import org.onosproject.artemis.ArtemisEventListener;
@@ -68,26 +70,30 @@ public class ArtemisDetectorImpl implements ArtemisDetector {
     void handleArtemisEvent(ArtemisEvent event) {
         // If an instance was deactivated, check whether we need to roll back the upgrade.
         if (event.type().equals(ArtemisEvent.Type.BGPUPDATE_ADDED)) {
-            JsonObject take = (JsonObject) event.subject();
+            JSONObject take = (JSONObject) event.subject();
 
             log.info("Received information about monitored prefix " + take.toString());
             artemisService.getConfig().ifPresent(config ->
                     config.monitoredPrefixes().forEach(artemisPrefix -> {
-                        IpPrefix prefix = artemisPrefix.prefix(), receivedPrefix;
+                        try {
+                            IpPrefix prefix = artemisPrefix.prefix(), receivedPrefix;
 
-                        receivedPrefix = IpPrefix.valueOf(take.get("prefix").asString());
+                            receivedPrefix = IpPrefix.valueOf(take.getString("prefix"));
 
-                        if (prefix.contains(receivedPrefix)) {
-                            JsonArray path = take.get("path").asArray();
+                            if (prefix.contains(receivedPrefix)) {
+                                JSONArray path = take.getJSONArray("path");
 
-                            int state = artemisPrefix.checkPath(path);
-                            if (state >= 100) {
-                                log.info("BGP Hijack detected; pushing prefix for hijack Deaggregation");
-                                eventDispatcher.post(new ArtemisEvent(ArtemisEvent.Type.HIJACK_ADDED,
-                                        receivedPrefix));
-                            } else {
-                                log.info("BGP Update is legit");
+                                int state = artemisPrefix.checkPath(path);
+                                if (state >= 100) {
+                                    log.info("BGP Hijack detected; pushing prefix for hijack Deaggregation");
+                                    eventDispatcher.post(new ArtemisEvent(ArtemisEvent.Type.HIJACK_ADDED,
+                                            receivedPrefix));
+                                } else {
+                                    log.info("BGP Update is legit");
+                                }
                             }
+                        } catch (JSONException e) {
+                            log.error(ExceptionUtils.getFullStackTrace(e));
                         }
                     })
             );

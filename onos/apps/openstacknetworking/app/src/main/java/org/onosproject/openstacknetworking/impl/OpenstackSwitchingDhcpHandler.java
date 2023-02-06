@@ -45,6 +45,8 @@ import org.onosproject.net.packet.PacketContext;
 import org.onosproject.net.packet.PacketProcessor;
 import org.onosproject.net.packet.PacketService;
 import org.onosproject.openstacknetworking.api.Constants;
+import org.onosproject.openstacknetworking.api.InstancePort;
+import org.onosproject.openstacknetworking.api.InstancePortService;
 import org.onosproject.openstacknetworking.api.OpenstackFlowRuleService;
 import org.onosproject.openstacknetworking.api.OpenstackNetworkService;
 import org.onosproject.openstacknode.api.OpenstackNode;
@@ -56,7 +58,6 @@ import org.openstack4j.model.network.IP;
 import org.openstack4j.model.network.Network;
 import org.openstack4j.model.network.Port;
 import org.openstack4j.model.network.Subnet;
-import org.openstack4j.openstack.networking.domain.NeutronPort;
 import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -81,21 +82,15 @@ import static org.onlab.packet.DHCP.DHCPOptionCode.OptionCode_DomainServer;
 import static org.onlab.packet.DHCP.DHCPOptionCode.OptionCode_END;
 import static org.onlab.packet.DHCP.DHCPOptionCode.OptionCode_LeaseTime;
 import static org.onlab.packet.DHCP.DHCPOptionCode.OptionCode_MessageType;
-import static org.onlab.packet.DHCP.DHCPOptionCode.OptionCode_RequestedParameters;
 import static org.onlab.packet.DHCP.DHCPOptionCode.OptionCode_RouterAddress;
 import static org.onlab.packet.DHCP.DHCPOptionCode.OptionCode_SubnetMask;
 import static org.onlab.packet.DHCP.MsgType.DHCPACK;
 import static org.onlab.packet.DHCP.MsgType.DHCPOFFER;
 import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.openstacknetworking.api.Constants.BAREMETAL;
 import static org.onosproject.openstacknetworking.api.Constants.DHCP_TABLE;
 import static org.onosproject.openstacknetworking.api.Constants.PRIORITY_DHCP_RULE;
 import static org.onosproject.openstacknetworking.impl.OsgiPropertyConstants.DHCP_SERVER_MAC;
 import static org.onosproject.openstacknetworking.impl.OsgiPropertyConstants.DHCP_SERVER_MAC_DEFAULT;
-import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.getBroadcastAddr;
-import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.getDhcpFullBootFileName;
-import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.getDhcpServerName;
-import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.getDhcpStaticBootFileName;
 import static org.onosproject.openstacknode.api.OpenstackNode.NodeType.COMPUTE;
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -130,9 +125,6 @@ public class OpenstackSwitchingDhcpHandler {
     private static final int DHCP_OPTION_DNS_LENGTH = 8;
     private static final int DHCP_OPTION_MTU_LENGTH = 2;
 
-    private static final byte DHCP_OPTION_SERVER_NAME_CODE = (byte) 66;
-    private static final byte DHCP_OPTION_BOOT_FILE_NAME_CODE = (byte) 67;
-
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected CoreService coreService;
 
@@ -141,6 +133,9 @@ public class OpenstackSwitchingDhcpHandler {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected PacketService packetService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    protected InstancePortService instancePortService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected OpenstackNetworkService osNetworkService;
@@ -246,30 +241,18 @@ public class OpenstackSwitchingDhcpHandler {
             }
 
             MacAddress clientMac = MacAddress.valueOf(dhcpPacket.getClientHardwareAddress());
-
-            Port port = osNetworkService.ports().stream()
-                    .filter(p -> MacAddress.valueOf(p.getMacAddress()).equals(clientMac))
-                    .findAny().orElse(null);
-
-            if (port == null) {
-                log.debug("Ignore DHCP request, since it comes from unmanaged openstack VM {}", clientMac);
+            InstancePort reqInstPort = instancePortService.instancePort(clientMac);
+            if (reqInstPort == null) {
+                log.trace("Failed to find host(MAC:{})", clientMac);
                 return;
             }
-
-            IP fixedIp = port.getFixedIps().stream().findFirst().orElse(null);
-
-            if (fixedIp == null) {
-                log.warn("There is no IP addresses are assigned with the port {}", port.getId());
-                return;
-            }
-
             Ethernet ethPacket = context.inPacket().parsed();
             switch (inPacketType) {
                 case DHCPDISCOVER:
-                    processDhcpDiscover(context, clientMac, port, ethPacket);
+                    processDhcpDiscover(context, clientMac, reqInstPort, ethPacket);
                     break;
                 case DHCPREQUEST:
-                    processDhcpRequest(context, clientMac, port, ethPacket);
+                    processDhcpRequest(context, clientMac, reqInstPort, ethPacket);
                     break;
                 case DHCPRELEASE:
                     log.trace("DHCP RELEASE received from {}", clientMac);
@@ -281,25 +264,23 @@ public class OpenstackSwitchingDhcpHandler {
         }
 
         private void processDhcpDiscover(PacketContext context, MacAddress clientMac,
-                                         Port port, Ethernet ethPacket) {
+                                         InstancePort instPort, Ethernet ethPacket) {
             log.trace("DHCP DISCOVER received from {}", clientMac);
             Ethernet discoverReply = buildReply(ethPacket,
                                                 (byte) DHCPOFFER.getValue(),
-                                                port);
+                                                instPort);
             sendReply(context, discoverReply);
-            log.trace("DHCP OFFER({}) is sent for {}",
-                            port.getFixedIps().stream().findFirst(), clientMac);
+            log.trace("DHCP OFFER({}) is sent for {}", instPort.ipAddress(), clientMac);
         }
 
         private void processDhcpRequest(PacketContext context, MacAddress clientMac,
-                                        Port port, Ethernet ethPacket) {
+                                        InstancePort instPort, Ethernet ethPacket) {
             log.trace("DHCP REQUEST received from {}", clientMac);
             Ethernet requestReply = buildReply(ethPacket,
                                                 (byte) DHCPACK.getValue(),
-                                                port);
+                                                instPort);
             sendReply(context, requestReply);
-            log.trace("DHCP ACK({}) is sent for {}",
-                            port.getFixedIps().stream().findFirst(), clientMac);
+            log.trace("DHCP ACK({}) is sent for {}", instPort.ipAddress(), clientMac);
         }
 
         private DHCP.MsgType getPacketType(DHCP dhcpPacket) {
@@ -317,14 +298,16 @@ public class OpenstackSwitchingDhcpHandler {
         }
 
         private Ethernet buildReply(Ethernet ethRequest, byte packetType,
-                                    Port port) {
-            log.trace("Build for DHCP reply msg for openstack port {}", port.toString());
-
+                                    InstancePort reqInstPort) {
+            log.trace("Build for DHCP reply msg for instance port {}", reqInstPort.toString());
+            Port osPort = osNetworkService.port(reqInstPort.portId());
+            if (osPort == null) {
+                log.error("Failed to retrieve openstack port information for instance port {}",
+                        reqInstPort.toString());
+                return null;
+            }
             // pick one IP address to make a reply
-            // since we check the validity of fixed IP address at parent method,
-            // so no need to double check the fixed IP existence here
-            IP fixedIp = port.getFixedIps().stream().findFirst().get();
-
+            IP fixedIp = osPort.getFixedIps().stream().findFirst().get();
             Subnet osSubnet = osNetworkService.subnet(fixedIp.getSubnetId());
 
             Ethernet ethReply = new Ethernet();
@@ -337,7 +320,7 @@ public class OpenstackSwitchingDhcpHandler {
 
             ipv4Reply.setSourceAddress(
                     clusterService.getLocalNode().ip().getIp4Address().toString());
-            ipv4Reply.setDestinationAddress(fixedIp.getIpAddress());
+            ipv4Reply.setDestinationAddress(reqInstPort.ipAddress().getIp4Address().toInt());
             ipv4Reply.setTtl(PACKET_TTL);
 
             UDP udpRequest = (UDP) ipv4Request.getPayload();
@@ -349,8 +332,8 @@ public class OpenstackSwitchingDhcpHandler {
             DHCP dhcpReply = buildDhcpReply(
                     dhcpRequest,
                     packetType,
-                    Ip4Address.valueOf(fixedIp.getIpAddress()),
-                    (NeutronPort) port, osSubnet);
+                    reqInstPort.ipAddress().getIp4Address(),
+                    osSubnet);
 
             udpReply.setPayload(dhcpReply);
             ipv4Reply.setPayload(udpReply);
@@ -377,7 +360,7 @@ public class OpenstackSwitchingDhcpHandler {
         }
 
         private DHCP buildDhcpReply(DHCP request, byte msgType, Ip4Address yourIp,
-                                    NeutronPort port, Subnet osSubnet) {
+                                    Subnet osSubnet) {
             Ip4Address gatewayIp = clusterService.getLocalNode().ip().getIp4Address();
             int subnetPrefixLen = IpPrefix.valueOf(osSubnet.getCidr()).prefixLength();
 
@@ -425,12 +408,6 @@ public class OpenstackSwitchingDhcpHandler {
                 options.add(doRouterAddr(osSubnet));
             }
 
-            // sets TFTP and bootfilename for PXE boot
-            if (BAREMETAL.equalsIgnoreCase(port.getvNicType())) {
-                options.add(doTftp(port));
-                options.add(doBootfileName(request, port));
-            }
-
             // end option
             options.add(doEnd());
 
@@ -474,13 +451,11 @@ public class OpenstackSwitchingDhcpHandler {
         }
 
         private DhcpOption doBroadcastAddr(Ip4Address yourIp, int subnetPrefixLen) {
-            String broadcast = getBroadcastAddr(yourIp.toString(), subnetPrefixLen);
-
+            Ip4Address broadcast = Ip4Address.makeMaskedAddress(yourIp, subnetPrefixLen);
             DhcpOption option = new DhcpOption();
             option.setCode(OptionCode_BroadcastAddress.getValue());
             option.setLength(DHCP_OPTION_DATA_LENGTH);
-            option.setData(IpAddress.valueOf(broadcast).toOctets());
-
+            option.setData(broadcast.toOctets());
             return option;
         }
 
@@ -523,39 +498,6 @@ public class OpenstackSwitchingDhcpHandler {
 
             option.setData(ByteBuffer.allocate(DHCP_OPTION_MTU_LENGTH)
                             .putShort(osNetwork.getMTU().shortValue()).array());
-
-            return option;
-        }
-
-        private DhcpOption doTftp(NeutronPort port) {
-            String serverName = getDhcpServerName(port);
-            log.info("DHCP server name : {}", serverName);
-
-            DhcpOption option = new DhcpOption();
-            option.setCode(DHCP_OPTION_SERVER_NAME_CODE);
-            option.setLength((byte) serverName.length());
-            option.setData(serverName.getBytes());
-
-            return option;
-        }
-
-        private DhcpOption doBootfileName(DHCP request, NeutronPort port) {
-            String bootStaticFileName = getDhcpStaticBootFileName(port);
-            String bootFullFileName = getDhcpFullBootFileName(port);
-
-            DhcpOption option = new DhcpOption();
-            option.setCode(DHCP_OPTION_BOOT_FILE_NAME_CODE);
-
-            DhcpOption requestOption = request.getOption(OptionCode_RequestedParameters);
-            if (requestOption.getLength() > 30) {
-                log.info("DHCP static boot file name {}", bootStaticFileName);
-                option.setLength((byte) bootStaticFileName.length());
-                option.setData(bootStaticFileName.getBytes());
-            } else {
-                log.info("DHCP full boot file path {}", bootFullFileName);
-                option.setLength((byte) bootFullFileName.length());
-                option.setData(bootFullFileName.getBytes());
-            }
 
             return option;
         }

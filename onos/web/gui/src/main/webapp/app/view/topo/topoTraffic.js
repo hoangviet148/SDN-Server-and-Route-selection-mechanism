@@ -47,8 +47,7 @@
     // internal state
     var trafficMode = null,
         hoverMode = null,
-        allTrafficIndex = 0,
-        customTrafficIndex = 0;
+        allTrafficIndex = 0;
 
 
     // === -----------------------------------------------------
@@ -136,16 +135,6 @@
         });
         flash.flash(allTrafficMsgs[allTrafficIndex]);
         allTrafficIndex = (allTrafficIndex + 1) % 3;
-    }
-
-    function showCustomTraffic() {
-        trafficMode = 'allCustom';
-        hoverMode = null;
-        wss.sendEvent('requestCustomTraffic', {
-            index: customTrafficIndex,
-        });
-        flash.flash('Custom Traffic');
-        customTrafficIndex = customTrafficIndex + 1;
     }
 
     function showDeviceLinkFlows() {
@@ -281,7 +270,6 @@
                 showNextIntent: showNextIntent,
                 showSelectedIntentTraffic: showSelectedIntentTraffic,
                 selectIntent: selectIntent,
-                showCustomTraffic: showCustomTraffic,
 
                 // invoked from mouseover/mouseout and selection change
                 requestTrafficForMode: requestTrafficForMode,

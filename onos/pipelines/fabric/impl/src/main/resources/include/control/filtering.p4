@@ -35,19 +35,17 @@ control Filtering (inout parsed_headers_t hdr,
         // Do ACL table in case we want to punt to cpu.
         fabric_metadata.skip_forwarding = _TRUE;
         fabric_metadata.skip_next = _TRUE;
-        fabric_metadata.port_type = PORT_TYPE_UNKNOWN;
         ingress_port_vlan_counter.count();
     }
 
-    action permit(port_type_t port_type) {
+    action permit() {
         // Allow packet as is.
-        fabric_metadata.port_type = port_type;
         ingress_port_vlan_counter.count();
     }
 
-    action permit_with_internal_vlan(vlan_id_t vlan_id, port_type_t port_type) {
+    action permit_with_internal_vlan(vlan_id_t vlan_id) {
         fabric_metadata.vlan_id = vlan_id;
-        permit(port_type);
+        permit();
     }
 
     // FIXME: remove the use of ternary match on inner VLAN.

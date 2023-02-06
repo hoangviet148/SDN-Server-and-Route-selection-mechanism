@@ -19,10 +19,8 @@ import com.google.common.collect.Sets;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.onlab.osgi.ComponentContextAdapter;
 import org.onlab.packet.ChassisId;
 import org.onlab.packet.IpAddress;
-import org.onosproject.cfg.ComponentConfigAdapter;
 import org.onosproject.cluster.ClusterServiceAdapter;
 import org.onosproject.cluster.ControllerNode;
 import org.onosproject.cluster.DefaultControllerNode;
@@ -102,7 +100,6 @@ public class DeviceManagerTest {
         service = mgr;
         admin = mgr;
         registry = mgr;
-        mgr.cfgService = new ComponentConfigAdapter();
         mgr.store = new SimpleDeviceStore();
         injectEventDispatcher(mgr, new TestEventDispatcher());
         TestMastershipManager mastershipManager = new TestMastershipManager();
@@ -111,7 +108,7 @@ public class DeviceManagerTest {
         mgr.clusterService = new TestClusterService();
         mgr.networkConfigService = new TestNetworkConfigService();
         mgr.communicationService = new TestClusterCommunicationService();
-        mgr.activate(new ComponentContextAdapter());
+        mgr.activate();
 
 
         service.addListener(listener);
@@ -128,7 +125,7 @@ public class DeviceManagerTest {
         assertFalse("provider should not be registered",
                     registry.getProviders().contains(provider.id()));
         service.removeListener(listener);
-        mgr.deactivate(new ComponentContextAdapter());
+        mgr.deactivate();
     }
 
     private void connectDevice(DeviceId deviceId, String swVersion) {
@@ -362,11 +359,6 @@ public class DeviceManagerTest {
         @Override
         public ControllerNode getLocalNode() {
             return local;
-        }
-
-        @Override
-        public ControllerNode.State getState(NodeId nodeId) {
-            return ControllerNode.State.READY;
         }
 
     }

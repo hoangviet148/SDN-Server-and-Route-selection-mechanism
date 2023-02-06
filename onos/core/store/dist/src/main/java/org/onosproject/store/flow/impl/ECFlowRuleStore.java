@@ -44,7 +44,6 @@ import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.NodeId;
-import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.core.IdGenerator;
 import org.onosproject.event.AbstractListenerManager;
@@ -55,7 +54,6 @@ import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.CompletedBatchOperation;
 import org.onosproject.net.flow.DefaultFlowEntry;
-import org.onosproject.net.flow.DefaultFlowRule;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowEntry.FlowEntryState;
 import org.onosproject.net.flow.FlowRule;
@@ -64,8 +62,8 @@ import org.onosproject.net.flow.FlowRuleEvent.Type;
 import org.onosproject.net.flow.FlowRuleService;
 import org.onosproject.net.flow.FlowRuleStore;
 import org.onosproject.net.flow.FlowRuleStoreDelegate;
-import org.onosproject.net.flow.FlowRuleStoreException;
 import org.onosproject.net.flow.StoredFlowEntry;
+import org.onosproject.net.flow.FlowRuleStoreException;
 import org.onosproject.net.flow.TableStatisticsEntry;
 import org.onosproject.net.flow.oldbatch.FlowRuleBatchEntry;
 import org.onosproject.net.flow.oldbatch.FlowRuleBatchEntry.FlowRuleOperation;
@@ -111,7 +109,6 @@ import static org.onosproject.store.flow.impl.ECFlowRuleStoreMessageSubjects.APP
 import static org.onosproject.store.flow.impl.ECFlowRuleStoreMessageSubjects.FLOW_TABLE_BACKUP;
 import static org.onosproject.store.flow.impl.ECFlowRuleStoreMessageSubjects.GET_DEVICE_FLOW_COUNT;
 import static org.onosproject.store.flow.impl.ECFlowRuleStoreMessageSubjects.GET_FLOW_ENTRY;
-import static org.onosproject.store.flow.impl.ECFlowRuleStoreMessageSubjects.PURGE_FLOW_RULES;
 import static org.onosproject.store.flow.impl.ECFlowRuleStoreMessageSubjects.REMOTE_APPLY_COMPLETED;
 import static org.onosproject.store.flow.impl.ECFlowRuleStoreMessageSubjects.REMOVE_FLOW_ENTRY;
 import static org.slf4j.LoggerFactory.getLogger;
@@ -139,7 +136,6 @@ public class ECFlowRuleStore
     private final Logger log = getLogger(getClass());
 
     private static final long FLOW_RULE_STORE_TIMEOUT_MILLIS = 5000;
-    private static final long PURGE_TIMEOUT_MILLIS = 30000;
     private static final int GET_FLOW_ENTRIES_TIMEOUT = 30; //seconds
 
     /** Number of threads in the message handler pool. */
@@ -343,11 +339,6 @@ public class ECFlowRuleStore
             serializer::encode, executor);
         clusterCommunicator.addSubscriber(
             REMOVE_FLOW_ENTRY, serializer::decode, this::removeFlowRuleInternal, serializer::encode, executor);
-        clusterCommunicator.<Pair<DeviceId, ApplicationId>, Boolean>addSubscriber(
-                PURGE_FLOW_RULES,
-                serializer::decode,
-                p -> flowTable.purgeFlowRules(p.getLeft(), p.getRight()),
-                serializer::encode, executor);
     }
 
     private void unregisterMessageHandlers() {
@@ -380,7 +371,7 @@ public class ECFlowRuleStore
     public int getFlowRuleCount(DeviceId deviceId, FlowEntryState state) {
         NodeId master = mastershipService.getMasterFor(deviceId);
         if (master == null && deviceService.isAvailable(deviceId)) {
-            log.warn("Failed to getFlowRuleCount: No master for {}", deviceId);
+            log.debug("Failed to getFlowRuleCount: No master for {}", deviceId);
             return 0;
         }
 
@@ -405,7 +396,7 @@ public class ECFlowRuleStore
         NodeId master = mastershipService.getMasterFor(rule.deviceId());
 
         if (master == null && deviceService.isAvailable(rule.deviceId())) {
-            log.warn("Failed to getFlowEntry: No master for {}", rule.deviceId());
+            log.debug("Failed to getFlowEntry: No master for {}", rule.deviceId());
             return null;
         }
 
@@ -451,7 +442,7 @@ public class ECFlowRuleStore
         NodeId master = mastershipService.getMasterFor(deviceId);
 
         if (master == null) {
-            log.warn("Failed to storeBatch: No master for {}", deviceId);
+            log.warn("No master for {} ", deviceId);
 
             Set<FlowRule> allFailures = operation.getOperations()
                 .stream()
@@ -527,9 +518,7 @@ public class ECFlowRuleStore
                         return flowTable.update(op.target(), stored -> {
                             stored.setState(FlowEntryState.PENDING_REMOVE);
                             log.debug("Setting state of rule to pending remove: {}", stored);
-                            // Using the stored value instead of op to allow the removal
-                            // of flows that do not specify actions or have empty treatment
-                            return new FlowRuleBatchEntry(op.operator(), new DefaultFlowRule(stored));
+                            return op;
                         });
                     default:
                         log.warn("Unknown flow operation operator: {}", op.operator());
@@ -639,35 +628,6 @@ public class ECFlowRuleStore
     @Override
     public void purgeFlowRule(DeviceId deviceId) {
         flowTable.purgeFlowRule(deviceId);
-    }
-
-    @Override
-    public boolean purgeFlowRules(DeviceId deviceId, ApplicationId appId) {
-        NodeId master = mastershipService.getMasterFor(deviceId);
-
-        if (Objects.equals(local, master)) {
-            // bypass and handle it locally
-            return flowTable.purgeFlowRules(deviceId, appId);
-        }
-
-        if (master == null) {
-            log.warn("Failed to purgeFlowRules: No master for {}", deviceId);
-            return false;
-        }
-
-        log.trace("Forwarding purgeFlowRules to {}, which is the master for device {}",
-                  master, deviceId);
-
-        return Tools.futureGetOrElse(
-                clusterCommunicator.sendAndReceive(
-                        Pair.of(deviceId, appId),
-                        PURGE_FLOW_RULES,
-                        serializer::encode,
-                        serializer::decode,
-                        master),
-                FLOW_RULE_STORE_TIMEOUT_MILLIS,
-                TimeUnit.MILLISECONDS,
-                false);
     }
 
     @Override
@@ -911,33 +871,6 @@ public class ECFlowRuleStore
         }
 
         /**
-         * Purges flow rules for the given device and application id.
-         *
-         * @param deviceId the device for which to purge flow rules
-         * @param appId the application id for with to purge flow rules
-         * @return true if purge is successful, false otherwise
-         */
-        public boolean purgeFlowRules(DeviceId deviceId, ApplicationId appId) {
-            DeviceFlowTable flowTable = flowTables.get(deviceId);
-            if (flowTable != null) {
-                // flowTable.purge() returns a CompletableFuture<Void>, we want
-                // to return true when the completable future returns correctly
-                // within the timeout, otherwise return false.
-                try {
-                    // Use higher timeout, purge(appId) may require more time
-                    // than normal operations because it's applying the purge
-                    // operation on every single flow table bucket.
-                    flowTable.purge(appId).get(PURGE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
-                    return true;
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                } catch (ExecutionException | TimeoutException ignored) {
-                }
-            }
-            return false;
-        }
-
-        /**
          * Purges all flow rules from the table.
          */
         public void purgeFlowRules() {
@@ -960,7 +893,7 @@ public class ECFlowRuleStore
         NodeId master = mastershipService.getMasterFor(deviceId);
 
         if (master == null && deviceService.isAvailable(deviceId)) {
-            log.warn("Failed to getTableStats: No master for {}", deviceId);
+            log.debug("Failed to getTableStats: No master for {}", deviceId);
             return Collections.emptyList();
         }
 

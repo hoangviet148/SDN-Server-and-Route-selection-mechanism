@@ -305,12 +305,6 @@ public class GroupManager
     }
 
     @Override
-    public void purgeGroupEntries(DeviceId deviceId, ApplicationId appId) {
-        checkPermission(GROUP_WRITE);
-        store.purgeGroupEntries(deviceId, appId);
-    }
-
-    @Override
     public void purgeGroupEntries() {
         checkPermission(GROUP_WRITE);
         store.purgeGroupEntries();

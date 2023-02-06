@@ -15,7 +15,6 @@
  */
 package org.onosproject.net.meter;
 
-import org.onosproject.core.ApplicationId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.store.Store;
 
@@ -28,12 +27,12 @@ import java.util.concurrent.CompletableFuture;
 public interface MeterStore extends Store<MeterEvent, MeterStoreDelegate> {
 
     /**
-     * Adds a meter to the store or updates a meter in the store.
+     * Adds a meter to the store.
      *
      * @param meter a meter
      * @return a future indicating the result of the store operation
      */
-    CompletableFuture<MeterStoreResult> addOrUpdateMeter(Meter meter);
+    CompletableFuture<MeterStoreResult> storeMeter(Meter meter);
 
     /**
      * Deletes a meter from the store.
@@ -52,14 +51,6 @@ public interface MeterStore extends Store<MeterEvent, MeterStoreDelegate> {
     MeterStoreResult storeMeterFeatures(MeterFeatures meterfeatures);
 
     /**
-     * Adds a collection of meter features to the store.
-     *
-     * @param meterfeatures the collection of meter features
-     * @return the result of the store operation
-     */
-    MeterStoreResult storeMeterFeatures(Collection<MeterFeatures> meterfeatures);
-
-    /**
      * Deletes the meter features from the store.
      *
      * @param deviceId the device id
@@ -68,20 +59,19 @@ public interface MeterStore extends Store<MeterEvent, MeterStoreDelegate> {
     MeterStoreResult deleteMeterFeatures(DeviceId deviceId);
 
     /**
-     * Deletes a collection of meter features from the store.
+     * Updates a meter whose meter id is the same as the passed meter.
      *
-     * @param meterfeatures a collection of meter features
+     * @param meter a new meter
      * @return a future indicating the result of the store operation
      */
-    MeterStoreResult deleteMeterFeatures(Collection<MeterFeatures> meterfeatures);
+    CompletableFuture<MeterStoreResult> updateMeter(Meter meter);
 
     /**
      * Updates a given meter's state with the provided state.
      *
      * @param meter a meter
-     * @return the updated meter
      */
-    Meter updateMeterState(Meter meter);
+    void updateMeterState(Meter meter);
 
     /**
      * Obtains a meter matching the given meter key.
@@ -94,7 +84,7 @@ public interface MeterStore extends Store<MeterEvent, MeterStoreDelegate> {
     /**
      * Returns all meters stored in the store.
      *
-     * @return an immutable copy of all meters
+     * @return a collection of meters
      */
     Collection<Meter> getAllMeters();
 
@@ -103,20 +93,9 @@ public interface MeterStore extends Store<MeterEvent, MeterStoreDelegate> {
      * precise device.
      *
      * @param deviceId the device to get the meter list from
-     * @return an immutable copy of the meters stored for a given device
+     * @return a collection of meters
      */
     Collection<Meter> getAllMeters(DeviceId deviceId);
-
-    /**
-     * Returns all meters stored in the store for a
-     * precise device and scope.
-     *
-     * @param deviceId a device id
-     * @param scope meters scope
-     * @return an immutable copy of the meters stored for a given device
-     *         withing a given scope
-     */
-    Collection<Meter> getAllMeters(DeviceId deviceId, MeterScope scope);
 
     /**
      * Update the store by deleting the failed meter.
@@ -133,54 +112,38 @@ public interface MeterStore extends Store<MeterEvent, MeterStoreDelegate> {
      *
      * @param m a meter
      */
-    void purgeMeter(Meter m);
+    void deleteMeterNow(Meter m);
+
+    /**
+     * Retrieve maximum meters available for the device.
+     *
+     * @param key the meter features key
+     * @return the maximum number of meters supported by the device
+     */
+    long getMaxMeters(MeterFeaturesKey key);
 
     /**
      * Allocates the first available MeterId.
      *
      * @param deviceId the device id
-     * @param meterScope the meter scope
      * @return the meter Id or null if it was not possible
      * to allocate a meter id
      */
-    MeterCellId allocateMeterId(DeviceId deviceId, MeterScope meterScope);
+    MeterId allocateMeterId(DeviceId deviceId);
 
     /**
      * Frees the given meter id.
      *
      * @param deviceId the device id
      * @param meterId  the id to be freed
-     * @deprecated in onos-2.5, freeing an ID is closely related to removal of a meter
-     * so, this function is no longer exposed on interface
      */
-    @Deprecated
     void freeMeterId(DeviceId deviceId, MeterId meterId);
 
     /**
      * Removes all meters of given device from store.
-     * This API is typically used when the device is offline.
      *
      * @param deviceId the device id
      */
-    void purgeMeters(DeviceId deviceId);
-
-    /**
-     * Removes all meters of given device and for the given application from store.
-     * This API is typically used when the device is offline.
-     *
-     * @param deviceId the device id
-     * @param appId the application id
-     */
-    void purgeMeters(DeviceId deviceId, ApplicationId appId);
-
-    /**
-     * Enables/disables user defined index mode for the store. In this mode users
-     * can provide an index for the meter. Store may reject switching mode requests
-     * at run time if meters were already allocated.
-     *
-     * @param enable to enable/disable the user defined index mode.
-     * @return true if user defined index mode is enabled. False otherwise.
-     */
-    boolean userDefinedIndexMode(boolean enable);
+    void purgeMeter(DeviceId deviceId);
 
 }

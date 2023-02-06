@@ -71,8 +71,6 @@
                    impl="org.onosproject.driver.extensions.OfdpaExtensionSelectorInterpreter" />
         <behaviour api="org.onosproject.net.behaviour.ExtensionSelectorResolver"
                    impl="org.onosproject.driver.extensions.OfdpaExtensionSelectorInterpreter" />
-        <behaviour api="org.onosproject.net.behaviour.PipelineTraceable"
-                   impl="org.onosproject.driver.traceable.OfdpaPipelineTraceable" />
         <property name="meterCapable">false</property>
         <property name="accumulatorEnabled">true</property>
     </driver>
@@ -169,8 +167,6 @@
                    impl="org.onosproject.driver.pipeline.ofdpa.OvsOfdpaPipeline"/>
         <behaviour api="org.onosproject.openflow.controller.ExtensionSelectorInterpreter"
                    impl="org.onosproject.driver.extensions.OvsOfdpaExtensionSelectorInterpreter" />
-        <behaviour api="org.onosproject.net.behaviour.PipelineTraceable"
-                   impl="org.onosproject.driver.traceable.OfdpaPipelineTraceable" />
     </driver>
 
     <!--  The SoftRouter driver is meant to be used by any software/NPU based

@@ -50,6 +50,7 @@ import org.onosproject.store.service.ConsistentMapBuilder;
 import org.onosproject.store.service.TestStorageService;
 
 import org.onlab.packet.Ip4Address;
+import java.util.Iterator;
 import java.util.Optional;
 
 import org.osgi.service.component.ComponentContext;
@@ -63,7 +64,6 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.Assert.assertEquals;
 import static org.onosproject.net.NetTestTools.APP_ID;
-import static org.onosproject.net.NetTestTools.APP_ID_2;
 import static org.onosproject.net.NetTestTools.did;
 
 /**
@@ -83,7 +83,6 @@ public class ECFlowRuleStoreTest {
     private static final IntentTestsMocks.MockTreatment TREATMENT =
             new IntentTestsMocks.MockTreatment();
     DeviceId deviceId = did("device1");
-    DeviceId deviceId2 = did("device2");
     FlowRule flowRule =
             DefaultFlowRule.builder()
                     .forDevice(deviceId)
@@ -102,25 +101,6 @@ public class ECFlowRuleStoreTest {
                     .makeTemporary(44)
                     .fromApp(APP_ID)
                     .build();
-    FlowRule flowRule2 =
-            DefaultFlowRule.builder()
-                    .forDevice(deviceId)
-                    .withSelector(SELECTOR)
-                    .withTreatment(TREATMENT)
-                    .withPriority(44)
-                    .makePermanent()
-                    .fromApp(APP_ID_2)
-                    .build();
-    FlowRule flowRule3 =
-            DefaultFlowRule.builder()
-                    .forDevice(deviceId2)
-                    .withSelector(SELECTOR)
-                    .withTreatment(TREATMENT)
-                    .withPriority(55)
-                    .makePermanent()
-                    .fromApp(APP_ID_2)
-                    .build();
-
 
     static class MasterOfAll extends MastershipServiceAdapter {
         @Override
@@ -267,7 +247,14 @@ public class ECFlowRuleStoreTest {
         assertEquals("PENDING_ADD", flowEntry1.state().toString());
 
         flowStoreImpl.addOrUpdateFlowRule(flowEntry);
-        assertFlowsOnDevice(deviceId, 1);
+        Iterable<FlowEntry> flows = flowStoreImpl.getFlowEntries(deviceId);
+        int sum = 0;
+        Iterator it = flows.iterator();
+        while (it.hasNext()) {
+            it.next();
+            sum++;
+        }
+        assertThat(sum, is(1));
 
         FlowEntry flowEntry2 = flowStoreImpl.getFlowEntry(flowRule);
         assertEquals("ADDED", flowEntry2.state().toString());
@@ -283,7 +270,15 @@ public class ECFlowRuleStoreTest {
         for (FlowEntry flow : flows1) {
             flowStoreImpl.removeFlowRule(flow);
         }
-        assertFlowsOnDevice(deviceId, 0);
+
+        Iterable<FlowEntry> flows2 = flowStoreImpl.getFlowEntries(deviceId);
+        int sum = 0;
+        Iterator it = flows2.iterator();
+        while (it.hasNext()) {
+            it.next();
+            sum++;
+        }
+        assertThat(sum, is(0));
     }
 
     /**
@@ -296,41 +291,23 @@ public class ECFlowRuleStoreTest {
 
         FlowEntry flowEntry1 = new DefaultFlowEntry(flowRule1);
         flowStoreImpl.addOrUpdateFlowRule(flowEntry1);
-        assertFlowsOnDevice(deviceId, 2);
+        Iterable<FlowEntry> flows1 = flowStoreImpl.getFlowEntries(deviceId);
+        int sum2 = 0;
+        Iterator it1 = flows1.iterator();
+        while (it1.hasNext()) {
+            it1.next();
+            sum2++;
+        }
+        assertThat(sum2, is(2));
         flowStoreImpl.purgeFlowRule(deviceId);
 
-        assertFlowsOnDevice(deviceId, 0);
-    }
-
-    /**
-     * Tests purge flow for a device and an application.
-     */
-    @Test
-    public void testPurgeFlowAppId() {
-        FlowEntry flowEntry1 = new DefaultFlowEntry(flowRule1);
-        flowStoreImpl.addOrUpdateFlowRule(flowEntry1);
-
-        FlowEntry flowEntry2 = new DefaultFlowEntry(flowRule2);
-        flowStoreImpl.addOrUpdateFlowRule(flowEntry2);
-
-        FlowEntry flowEntry3 = new DefaultFlowEntry(flowRule3);
-        flowStoreImpl.addOrUpdateFlowRule(flowEntry3);
-
-        assertFlowsOnDevice(deviceId, 2);
-        assertFlowsOnDevice(deviceId2, 1);
-
-        flowStoreImpl.purgeFlowRules(deviceId, APP_ID_2);
-
-        assertFlowsOnDevice(deviceId, 1);
-        assertFlowsOnDevice(deviceId2, 1);
-    }
-
-    private void assertFlowsOnDevice(DeviceId deviceId, int nFlows) {
-        Iterable<FlowEntry> flows1 = flowStoreImpl.getFlowEntries(deviceId);
-        int sum1 = 0;
-        for (FlowEntry flowEntry : flows1) {
-            sum1++;
+        Iterable<FlowEntry> flows3 = flowStoreImpl.getFlowEntries(deviceId);
+        int sum3 = 0;
+        Iterator it3 = flows3.iterator();
+        while (it3.hasNext()) {
+            it3.next();
+            sum3++;
         }
-        assertThat(sum1, is(nFlows));
+        assertThat(sum3, is(0));
     }
 }

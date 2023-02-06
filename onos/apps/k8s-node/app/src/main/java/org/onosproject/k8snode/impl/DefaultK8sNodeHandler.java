@@ -22,7 +22,6 @@ import org.onosproject.cluster.LeadershipService;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.k8snode.api.K8sApiConfigService;
 import org.onosproject.k8snode.api.K8sNode;
 import org.onosproject.k8snode.api.K8sNodeAdminService;
 import org.onosproject.k8snode.api.K8sNodeEvent;
@@ -43,7 +42,7 @@ import org.onosproject.net.behaviour.InterfaceConfig;
 import org.onosproject.net.behaviour.PatchDescription;
 import org.onosproject.net.behaviour.TunnelDescription;
 import org.onosproject.net.behaviour.TunnelEndPoints;
-import org.onosproject.net.behaviour.TunnelKey;
+import org.onosproject.net.behaviour.TunnelKeys;
 import org.onosproject.net.device.DeviceAdminService;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
@@ -69,10 +68,19 @@ import static java.lang.Thread.sleep;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static org.onlab.packet.TpPort.tpPort;
 import static org.onlab.util.Tools.groupedThreads;
+import static org.onosproject.k8snode.api.Constants.EXTERNAL_BRIDGE;
 import static org.onosproject.k8snode.api.Constants.GENEVE;
+import static org.onosproject.k8snode.api.Constants.GENEVE_TUNNEL;
 import static org.onosproject.k8snode.api.Constants.GRE;
+import static org.onosproject.k8snode.api.Constants.GRE_TUNNEL;
+import static org.onosproject.k8snode.api.Constants.INTEGRATION_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.INTEGRATION_TO_EXTERNAL_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.INTEGRATION_TO_LOCAL_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.LOCAL_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.LOCAL_TO_INTEGRATION_BRIDGE;
+import static org.onosproject.k8snode.api.Constants.PHYSICAL_EXTERNAL_BRIDGE;
 import static org.onosproject.k8snode.api.Constants.VXLAN;
-import static org.onosproject.k8snode.api.K8sApiConfig.Mode.NORMAL;
+import static org.onosproject.k8snode.api.Constants.VXLAN_TUNNEL;
 import static org.onosproject.k8snode.api.K8sNodeService.APP_ID;
 import static org.onosproject.k8snode.api.K8sNodeState.COMPLETE;
 import static org.onosproject.k8snode.api.K8sNodeState.DEVICE_CREATED;
@@ -86,7 +94,6 @@ import static org.onosproject.k8snode.util.K8sNodeUtil.getOvsdbClient;
 import static org.onosproject.k8snode.util.K8sNodeUtil.isOvsdbConnected;
 import static org.onosproject.net.AnnotationKeys.PORT_NAME;
 import static org.slf4j.LoggerFactory.getLogger;
-
 
 /**
  * Service bootstraps kubernetes node based on its type.
@@ -123,9 +130,6 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected OvsdbController ovsdbController;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected K8sApiConfigService k8sApiConfigService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected K8sNodeService k8sNodeService;
@@ -192,19 +196,13 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
             return;
         }
         if (!deviceService.isAvailable(k8sNode.intgBridge())) {
-            createBridge(k8sNode, k8sNode.intgBridgeName(), k8sNode.intgBridge());
+            createBridge(k8sNode, INTEGRATION_BRIDGE, k8sNode.intgBridge());
         }
         if (!deviceService.isAvailable(k8sNode.extBridge())) {
-            createBridge(k8sNode, k8sNode.extBridgeName(), k8sNode.extBridge());
+            createBridge(k8sNode, EXTERNAL_BRIDGE, k8sNode.extBridge());
         }
         if (!deviceService.isAvailable(k8sNode.localBridge())) {
-            createBridge(k8sNode, k8sNode.localBridgeName(), k8sNode.localBridge());
-        }
-
-        if (k8sNode.mode() == NORMAL) {
-            if (!deviceService.isAvailable(k8sNode.tunBridge())) {
-                createBridge(k8sNode, k8sNode.tunBridgeName(), k8sNode.tunBridge());
-            }
+            createBridge(k8sNode, LOCAL_BRIDGE, k8sNode.localBridge());
         }
     }
 
@@ -219,21 +217,19 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
             // create patch ports between integration and external bridges
             createPatchInterfaces(k8sNode);
 
-            if (k8sNode.mode() == NORMAL) {
-                if (k8sNode.dataIp() != null &&
-                        !isIntfEnabled(k8sNode, k8sNode.vxlanPortName())) {
-                    createVxlanTunnelInterface(k8sNode);
-                }
+            if (k8sNode.dataIp() != null &&
+                    !isIntfEnabled(k8sNode, VXLAN_TUNNEL)) {
+                createVxlanTunnelInterface(k8sNode);
+            }
 
-                if (k8sNode.dataIp() != null &&
-                        !isIntfEnabled(k8sNode, k8sNode.grePortName())) {
-                    createGreTunnelInterface(k8sNode);
-                }
+            if (k8sNode.dataIp() != null &&
+                    !isIntfEnabled(k8sNode, GRE_TUNNEL)) {
+                createGreTunnelInterface(k8sNode);
+            }
 
-                if (k8sNode.dataIp() != null &&
-                        !isIntfEnabled(k8sNode, k8sNode.genevePortName())) {
-                    createGeneveTunnelInterface(k8sNode);
-                }
+            if (k8sNode.dataIp() != null &&
+                    !isIntfEnabled(k8sNode, GENEVE_TUNNEL)) {
+                createGeneveTunnelInterface(k8sNode);
             }
         } catch (Exception e) {
             log.error("Exception occurred because of {}", e);
@@ -305,8 +301,8 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
     private void createBridge(K8sNode k8sNode, String bridgeName, DeviceId devId) {
         Device device = deviceService.getDevice(k8sNode.ovsdb());
 
-        List<ControllerInfo> controllers = k8sApiConfigService.apiConfigs().stream()
-                .map(c -> new ControllerInfo(c.ipAddress(), DEFAULT_OFPORT, DEFAULT_OF_PROTO))
+        List<ControllerInfo> controllers = clusterService.getNodes().stream()
+                .map(n -> new ControllerInfo(n.ip(), DEFAULT_OFPORT, DEFAULT_OF_PROTO))
                 .collect(Collectors.toList());
 
         String dpid = devId.toString().substring(DPID_BEGIN);
@@ -328,7 +324,7 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
      * @param k8sNode       kubernetes node
      */
     private void createVxlanTunnelInterface(K8sNode k8sNode) {
-        createTunnelInterface(k8sNode, VXLAN, k8sNode.vxlanPortName());
+        createTunnelInterface(k8sNode, VXLAN, VXLAN_TUNNEL);
     }
 
     /**
@@ -337,7 +333,7 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
      * @param k8sNode       kubernetes node
      */
     private void createGreTunnelInterface(K8sNode k8sNode) {
-        createTunnelInterface(k8sNode, GRE, k8sNode.grePortName());
+        createTunnelInterface(k8sNode, GRE, GRE_TUNNEL);
     }
 
     /**
@@ -346,7 +342,7 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
      * @param k8sNode       kubernetes node
      */
     private void createGeneveTunnelInterface(K8sNode k8sNode) {
-        createTunnelInterface(k8sNode, GENEVE, k8sNode.genevePortName());
+        createTunnelInterface(k8sNode, GENEVE, GENEVE_TUNNEL);
     }
 
     private void createPatchInterfaces(K8sNode k8sNode) {
@@ -359,88 +355,40 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
         // integration bridge -> external bridge
         PatchDescription brIntExtPatchDesc =
                 DefaultPatchDescription.builder()
-                        .deviceId(k8sNode.intgBridgeName())
-                        .ifaceName(k8sNode.intgToExtPatchPortName())
-                        .peer(k8sNode.extToIntgPatchPortName())
-                        .build();
-
-        // integration bridge -> tunnel bridge
-        PatchDescription brIntTunPatchDesc =
-                DefaultPatchDescription.builder()
-                        .deviceId(k8sNode.intgBridgeName())
-                        .ifaceName(k8sNode.intgToTunPatchPortName())
-                        .peer(k8sNode.tunToIntgPatchPortName())
-                        .build();
+                .deviceId(INTEGRATION_BRIDGE)
+                .ifaceName(INTEGRATION_TO_EXTERNAL_BRIDGE)
+                .peer(PHYSICAL_EXTERNAL_BRIDGE)
+                .build();
 
         // external bridge -> integration bridge
         PatchDescription brExtIntPatchDesc =
                 DefaultPatchDescription.builder()
-                        .deviceId(k8sNode.extBridgeName())
-                        .ifaceName(k8sNode.extToIntgPatchPortName())
-                        .peer(k8sNode.intgToExtPatchPortName())
-                        .build();
+                .deviceId(EXTERNAL_BRIDGE)
+                .ifaceName(PHYSICAL_EXTERNAL_BRIDGE)
+                .peer(INTEGRATION_TO_EXTERNAL_BRIDGE)
+                .build();
 
         // integration bridge -> local bridge
         PatchDescription brIntLocalPatchDesc =
                 DefaultPatchDescription.builder()
-                        .deviceId(k8sNode.intgBridgeName())
-                        .ifaceName(k8sNode.intgToLocalPatchPortName())
-                        .peer(k8sNode.localToIntgPatchPortName())
+                        .deviceId(INTEGRATION_BRIDGE)
+                        .ifaceName(INTEGRATION_TO_LOCAL_BRIDGE)
+                        .peer(LOCAL_TO_INTEGRATION_BRIDGE)
                         .build();
 
         // local bridge -> integration bridge
         PatchDescription brLocalIntPatchDesc =
                 DefaultPatchDescription.builder()
-                        .deviceId(k8sNode.localBridgeName())
-                        .ifaceName(k8sNode.localToIntgPatchPortName())
-                        .peer(k8sNode.intgToLocalPatchPortName())
+                        .deviceId(LOCAL_BRIDGE)
+                        .ifaceName(LOCAL_TO_INTEGRATION_BRIDGE)
+                        .peer(INTEGRATION_TO_LOCAL_BRIDGE)
                         .build();
 
         InterfaceConfig ifaceConfig = device.as(InterfaceConfig.class);
-        ifaceConfig.addPatchMode(k8sNode.intgToExtPatchPortName(), brIntExtPatchDesc);
-        ifaceConfig.addPatchMode(k8sNode.extToIntgPatchPortName(), brExtIntPatchDesc);
-        ifaceConfig.addPatchMode(k8sNode.intgToLocalPatchPortName(), brIntLocalPatchDesc);
-        ifaceConfig.addPatchMode(k8sNode.localToIntgPatchPortName(), brLocalIntPatchDesc);
-        ifaceConfig.addPatchMode(k8sNode.intgToTunPatchPortName(), brIntTunPatchDesc);
-
-        if (k8sNode.mode() == NORMAL) {
-            // tunnel bridge -> integration bridge
-            PatchDescription brTunIntPatchDesc =
-                    DefaultPatchDescription.builder()
-                            .deviceId(k8sNode.tunBridgeName())
-                            .ifaceName(k8sNode.tunToIntgPatchPortName())
-                            .peer(k8sNode.intgToTunPatchPortName())
-                            .build();
-
-            ifaceConfig.addPatchMode(k8sNode.tunToIntgPatchPortName(), brTunIntPatchDesc);
-        } else {
-            // k8s integration bridge -> openstack integration bridge
-            PatchDescription k8sIntOsIntPatchDesc =
-                    DefaultPatchDescription.builder()
-                            .deviceId(k8sNode.intgBridgeName())
-                            .ifaceName(k8sNode.k8sIntgToOsPatchPortName())
-                            .peer(k8sNode.osToK8sIntgPatchPortName())
-                            .build();
-            ifaceConfig.addPatchMode(k8sNode.k8sIntgToOsPatchPortName(), k8sIntOsIntPatchDesc);
-
-            // k8s external bridge -> openstack integration bridge
-            PatchDescription k8sExtOsIntPatchDesc =
-                    DefaultPatchDescription.builder()
-                            .deviceId(k8sNode.extBridgeName())
-                            .ifaceName(k8sNode.k8sExtToOsPatchPortName())
-                            .peer(k8sNode.osToK8sExtPatchPortName())
-                            .build();
-            ifaceConfig.addPatchMode(k8sNode.k8sExtToOsPatchPortName(), k8sExtOsIntPatchDesc);
-
-            // external bridge -> router bridge
-            PatchDescription extRouterPatchDesc =
-                    DefaultPatchDescription.builder()
-                            .deviceId(k8sNode.extBridgeName())
-                            .ifaceName(k8sNode.extToRouterPatchPortName())
-                            .peer(k8sNode.routerToExtPatchPortName())
-                            .build();
-            ifaceConfig.addPatchMode(k8sNode.extToRouterPatchPortName(), extRouterPatchDesc);
-        }
+        ifaceConfig.addPatchMode(INTEGRATION_TO_EXTERNAL_BRIDGE, brIntExtPatchDesc);
+        ifaceConfig.addPatchMode(PHYSICAL_EXTERNAL_BRIDGE, brExtIntPatchDesc);
+        ifaceConfig.addPatchMode(INTEGRATION_TO_LOCAL_BRIDGE, brIntLocalPatchDesc);
+        ifaceConfig.addPatchMode(LOCAL_TO_INTEGRATION_BRIDGE, brLocalIntPatchDesc);
     }
 
     /**
@@ -460,7 +408,7 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
             return;
         }
 
-        TunnelDescription tunnelDesc = buildTunnelDesc(k8sNode, type, intfName);
+        TunnelDescription tunnelDesc = buildTunnelDesc(type, intfName);
 
         InterfaceConfig ifaceConfig = device.as(InterfaceConfig.class);
         ifaceConfig.addTunnelMode(intfName, tunnelDesc);
@@ -472,16 +420,14 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
      * @param type      network type
      * @return tunnel description
      */
-    private TunnelDescription buildTunnelDesc(K8sNode k8sNode,
-                                              String type, String intfName) {
-        TunnelKey<String> key = new TunnelKey<>(k8sNode.tunnelKey());
+    private TunnelDescription buildTunnelDesc(String type, String intfName) {
         if (VXLAN.equals(type) || GRE.equals(type) || GENEVE.equals(type)) {
             TunnelDescription.Builder tdBuilder =
                     DefaultTunnelDescription.builder()
-                            .deviceId(k8sNode.tunBridgeName())
+                            .deviceId(INTEGRATION_BRIDGE)
                             .ifaceName(intfName)
                             .remote(TunnelEndPoints.flowTunnelEndpoint())
-                            .key(key);
+                            .key(TunnelKeys.flowTunnelKey());
 
             switch (type) {
                 case VXLAN:
@@ -511,8 +457,8 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
      * @return true if the given interface is enabled, false otherwise
      */
     private boolean isIntfEnabled(K8sNode k8sNode, String intf) {
-        return deviceService.isAvailable(k8sNode.tunBridge()) &&
-                deviceService.getPorts(k8sNode.tunBridge()).stream()
+        return deviceService.isAvailable(k8sNode.intgBridge()) &&
+                deviceService.getPorts(k8sNode.intgBridge()).stream()
                         .anyMatch(port -> Objects.equals(
                                 port.annotations().value(PORT_NAME), intf) &&
                                 port.isEnabled());
@@ -558,16 +504,10 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
             log.error("Exception caused during init state checking...");
         }
 
-        boolean result = k8sNode.intgBridge() != null && k8sNode.extBridge() != null &&
+        return k8sNode.intgBridge() != null && k8sNode.extBridge() != null &&
                 deviceService.isAvailable(k8sNode.intgBridge()) &&
                 deviceService.isAvailable(k8sNode.extBridge()) &&
                 deviceService.isAvailable(k8sNode.localBridge());
-
-        if (k8sNode.mode() == NORMAL) {
-            return result && deviceService.isAvailable(k8sNode.tunBridge());
-        } else {
-            return result;
-        }
     }
 
     private boolean isDeviceCreatedStateDone(K8sNode k8sNode) {
@@ -580,19 +520,17 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
             log.error("Exception caused during init state checking...");
         }
 
-        if (k8sNode.mode() == NORMAL) {
-            if (k8sNode.dataIp() != null &&
-                    !isIntfEnabled(k8sNode, k8sNode.vxlanPortName())) {
-                return false;
-            }
-            if (k8sNode.dataIp() != null &&
-                    !isIntfEnabled(k8sNode, k8sNode.grePortName())) {
-                return false;
-            }
-            if (k8sNode.dataIp() != null &&
-                    !isIntfEnabled(k8sNode, k8sNode.genevePortName())) {
-                return false;
-            }
+        if (k8sNode.dataIp() != null &&
+                !isIntfEnabled(k8sNode, VXLAN_TUNNEL)) {
+            return false;
+        }
+        if (k8sNode.dataIp() != null &&
+                !isIntfEnabled(k8sNode, GRE_TUNNEL)) {
+            return false;
+        }
+        if (k8sNode.dataIp() != null &&
+                !isIntfEnabled(k8sNode, GENEVE_TUNNEL)) {
+            return false;
         }
 
         return true;
@@ -635,63 +573,17 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
             return;
         }
 
-        if (k8sNode.mode() == NORMAL) {
-            // delete tunnel bridge from the node
-            client.dropBridge(k8sNode.tunBridgeName());
-        } else {
-            // remove the patch ports direct to the integration bridge from tunnel bridge
-            removeTunnelPatchPort(k8sNode);
-            // remove the patch ports direct to the external bridge from the router bridge
-            removeRouterPatchPort(k8sNode);
-            // remove the patch ports directs to the openstack's br-int bridge from the int and ext bridges
-            removeOpenstackPatchPorts(k8sNode);
-        }
-
         // delete integration bridge from the node
-        client.dropBridge(k8sNode.intgBridgeName());
+        client.dropBridge(INTEGRATION_BRIDGE);
 
         // delete external bridge from the node
-        client.dropBridge(k8sNode.extBridgeName());
+        client.dropBridge(EXTERNAL_BRIDGE);
 
         // delete local bridge from the node
-        client.dropBridge(k8sNode.localBridgeName());
+        client.dropBridge(LOCAL_BRIDGE);
 
         // disconnect ovsdb
-        // client.disconnect();
-    }
-
-    private void removeTunnelPatchPort(K8sNode k8sNode) {
-        OvsdbClientService client = getOvsdbClient(k8sNode, ovsdbPortNum, ovsdbController);
-        if (client == null) {
-            log.info("Failed to get ovsdb client");
-            return;
-        }
-
-        client.dropInterface(k8sNode.tunToIntgPatchPortName());
-    }
-
-    private void removeRouterPatchPort(K8sNode k8sNode) {
-        OvsdbClientService client = getOvsdbClient(k8sNode, ovsdbPortNum, ovsdbController);
-        if (client == null) {
-            log.info("Failed to get ovsdb client");
-            return;
-        }
-
-        client.dropInterface(k8sNode.routerToExtPatchPortName());
-    }
-
-    private void removeOpenstackPatchPorts(K8sNode k8sNode) {
-        OvsdbClientService client = getOvsdbClient(k8sNode, ovsdbPortNum, ovsdbController);
-        if (client == null) {
-            log.info("Failed to get ovsdb client");
-            return;
-        }
-
-        // remove patch port attached at br-int peers with the k8s integration bridge
-        client.dropInterface(k8sNode.osToK8sIntgPatchPortName());
-
-        // remove patch port attached at br-int peers with the k8s external bridge
-        client.dropInterface(k8sNode.osToK8sExtPatchPortName());
+        client.disconnect();
     }
 
     /**
@@ -819,9 +711,9 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
                         Port port = event.port();
                         String portName = port.annotations().value(PORT_NAME);
                         if (k8sNode.state() == DEVICE_CREATED && (
-                                Objects.equals(portName, k8sNode.vxlanPortName()) ||
-                                        Objects.equals(portName, k8sNode.grePortName()) ||
-                                        Objects.equals(portName, k8sNode.genevePortName()))) {
+                                Objects.equals(portName, VXLAN_TUNNEL) ||
+                                        Objects.equals(portName, GRE_TUNNEL) ||
+                                        Objects.equals(portName, GENEVE_TUNNEL))) {
                             log.info("Interface {} added or updated to {}",
                                     portName, device.id());
                             bootstrapNode(k8sNode);
@@ -844,9 +736,9 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
                         Port port = event.port();
                         String portName = port.annotations().value(PORT_NAME);
                         if (k8sNode.state() == COMPLETE && (
-                                Objects.equals(portName, k8sNode.vxlanPortName()) ||
-                                        Objects.equals(portName, k8sNode.grePortName()) ||
-                                        Objects.equals(portName, k8sNode.genevePortName()))) {
+                                Objects.equals(portName, VXLAN_TUNNEL) ||
+                                        Objects.equals(portName, GRE_TUNNEL) ||
+                                        Objects.equals(portName, GENEVE_TUNNEL))) {
                             log.warn("Interface {} removed from {}",
                                     portName, event.subject().id());
                             setState(k8sNode, INCOMPLETE);
@@ -877,17 +769,21 @@ public class DefaultK8sNodeHandler implements K8sNodeHandler {
                 case K8S_NODE_CREATED:
                 case K8S_NODE_UPDATED:
                     eventExecutor.execute(() -> {
+
                         if (!isRelevantHelper()) {
                             return;
                         }
+
                         bootstrapNode(event.subject());
                     });
                     break;
                 case K8S_NODE_REMOVED:
                     eventExecutor.execute(() -> {
+
                         if (!isRelevantHelper()) {
                             return;
                         }
+
                         processK8sNodeRemoved(event.subject());
                     });
                     break;

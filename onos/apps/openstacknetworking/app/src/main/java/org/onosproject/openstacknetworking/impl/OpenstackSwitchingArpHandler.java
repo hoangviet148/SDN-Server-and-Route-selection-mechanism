@@ -718,13 +718,13 @@ public class OpenstackSwitchingArpHandler {
                         osNetworkService, remoteNode);
 
                 TrafficTreatment treatmentToRemote = DefaultTrafficTreatment.builder()
-                        .extension(buildExtension(
-                                deviceService,
-                                remoteNode.intgBridge(),
-                                localNode.dataIp().getIp4Address()),
-                                remoteNode.intgBridge())
-                        .setOutput(portNum)
-                        .build();
+                .extension(buildExtension(
+                        deviceService,
+                        remoteNode.intgBridge(),
+                        localNode.dataIp().getIp4Address()),
+                        remoteNode.intgBridge())
+                .setOutput(portNum)
+                .build();
 
                 osFlowRuleService.setRule(
                         appId,
@@ -795,26 +795,12 @@ public class OpenstackSwitchingArpHandler {
                                                     boolean isTunnel,
                                                     boolean install) {
 
-        if (install) {
-            processGroupTableRules(osNode, netId, true);
-            processFlowTableRules(osNode, segId, netId, isTunnel, true);
-        } else {
-            processFlowTableRules(osNode, segId, netId, isTunnel, false);
-            processGroupTableRules(osNode, netId, false);
-        }
-    }
-
-    private void processGroupTableRules(OpenstackNode osNode,
-                                        String netId, boolean install) {
+        // add group rule
         int groupId = netId.hashCode();
         osGroupRuleService.setRule(appId, osNode.intgBridge(), groupId,
                 ALL, Lists.newArrayList(), install);
-    }
 
-    private void processFlowTableRules(OpenstackNode osNode,
-                                       String segId, String netId,
-                                       boolean isTunnel,
-                                       boolean install) {
+        // add flow rule
         TrafficSelector.Builder sBuilder = DefaultTrafficSelector.builder()
                 .matchEthType(EthType.EtherType.ARP.ethType().toShort())
                 .matchArpOp(ARP.OP_REQUEST);
@@ -886,7 +872,7 @@ public class OpenstackSwitchingArpHandler {
             Network network = event.subject();
 
             if (network == null) {
-                log.debug("Network is not specified.");
+                log.warn("Network is not specified.");
                 return false;
             } else {
                 return network.getProviderSegID() != null;
@@ -911,10 +897,9 @@ public class OpenstackSwitchingArpHandler {
                 case OPENSTACK_NETWORK_UPDATED:
                     eventExecutor.execute(() -> processNetworkCreation(event));
                     break;
-                case OPENSTACK_NETWORK_PRE_REMOVED:
+                case OPENSTACK_NETWORK_REMOVED:
                     eventExecutor.execute(() -> processNetworkRemoval(event));
                     break;
-                case OPENSTACK_NETWORK_REMOVED:
                 case OPENSTACK_PORT_CREATED:
                 case OPENSTACK_PORT_UPDATED:
                 case OPENSTACK_PORT_REMOVED:
@@ -1096,8 +1081,8 @@ public class OpenstackSwitchingArpHandler {
 
             netIds.stream()
                     .filter(nid -> osNetworkService.networkType(nid) == VXLAN ||
-                            osNetworkService.networkType(nid) == GRE ||
-                            osNetworkService.networkType(nid) == GENEVE)
+                                    osNetworkService.networkType(nid) == GRE ||
+                                    osNetworkService.networkType(nid) == GENEVE)
                     .forEach(nid -> {
                         String segId = osNetworkService.segmentId(nid);
                         setBaseVnetArpRuleForBroadcastMode(osNode, segId, nid, true, install);
@@ -1119,7 +1104,7 @@ public class OpenstackSwitchingArpHandler {
                         .forEach(p -> {
                             setArpRequestRule(p, install);
                             setArpReplyRule(p, install);
-                        });
+                });
             } else {
                 // we do nothing for proxy mode
             }

@@ -86,7 +86,7 @@ public class LumentumNetconfRoadmFlowRuleProgrammable extends AbstractHandlerBeh
     protected static final long MUX_OUT = 4201;
     protected static final long DEMUX_IN = 5101;
     protected static final long GHZ = 1_000_000_000L;
-    protected static final int LUMENTUM_ROADM20_MAX_CONNECTIONS = 130;
+    protected static final int LUMENTUM_ROADM20_MAX_CONNECTIONS = 100;
 
     /**Get the flow entries that are present on the Lumentum device, called by FlowRuleDriverProvider.
      *
@@ -130,7 +130,6 @@ public class LumentumNetconfRoadmFlowRuleProgrammable extends AbstractHandlerBeh
             if (rpcAddConnection(lumFlowRule)) {
                 added.add(lumFlowRule);
                 getConnectionCache().add(did(), lumFlowRule.getConnectionName(), lumFlowRule);
-                log.debug("Adding connection with selector {}", lumFlowRule.selector());
             }
         }
 
@@ -274,7 +273,6 @@ public class LumentumNetconfRoadmFlowRuleProgrammable extends AbstractHandlerBeh
                 .build();
 
         log.debug("Lumentum NETCONF - retrieved FlowRule startFreq {} endFreq {}", startFreq, endFreq);
-        log.debug("Lumentum NETCONF - retrieved FlowRule selector {}", selector);
 
         //Lookup of connection
         //Retrieved rules, cached rules are considered equal if the selector is equal
@@ -289,7 +287,7 @@ public class LumentumNetconfRoadmFlowRuleProgrammable extends AbstractHandlerBeh
 
         if (cacheRule == null) {
             //TODO consider a way to keep "external" FlowRules
-            log.error("Lumentum NETCONF connection {} not in the cache", pair.getRight());
+            log.error("Lumentum NETCONF connection not in the cache {}", pair.getRight());
             rpcDeleteExternalConnection(moduleId, connId);
             return null;
         } else {
@@ -330,39 +328,31 @@ public class LumentumNetconfRoadmFlowRuleProgrammable extends AbstractHandlerBeh
      * @param xc the cross connect flow rule
      * @return pair of module (1 for MUX/ADD, 2 for DEMUX/DROP) and connection number
      */
-    private Pair<Short, Short> setModuleIdConnection(LumentumFlowRule xc) {
-        int moduleId, connectionId;
-
+    private Pair<Short, Short> setModuleConnection(LumentumFlowRule xc, Integer id) {
         if (xc.isAddRule()) {
-            moduleId = 1;
+            xc.setConnectionModule((short) 1);
+            xc.setConnectionId(id.shortValue());
+            return Pair.of((short) 1, id.shortValue());
         } else {
-            moduleId = 2;
+            xc.setConnectionModule((short) 2);
+            xc.setConnectionId(id.shortValue());
+            return Pair.of((short) 2, id.shortValue());
         }
-
-        xc.setConnectionModule(moduleId);
-
-        connectionId = generateConnectionId(xc);
-
-        if (connectionId == 0) {
-            log.error("Max connections configured on device module {}", moduleId);
-            return null;
-        }
-
-        xc.setConnectionId(connectionId);
-
-        return Pair.of((short) moduleId, (short) connectionId);
     }
 
     //Following Lumentum documentation rpc operation to configure a new connection
     private boolean rpcAddConnection(LumentumFlowRule xc) {
 
-        Pair<Short, Short> pair = setModuleIdConnection(xc);
+        int currentConnectionId = generateConnectionId();
+
+        if (currentConnectionId == 0) {
+            log.error("Lumentum driver - 100 connections are already configured on the device");
+            return false;
+        }
+
+        Pair<Short, Short> pair = setModuleConnection(xc, currentConnectionId);
         String module = pair.getLeft().toString();
         String connectionId = pair.getRight().toString();
-
-        log.debug("Lumentum driver new connection sent moduleId {} connId {}",
-                xc.getConnectionModule(),
-                xc.getConnectionId());
 
         //Conversion of ochSignal format (center frequency + diameter) to Lumentum frequency slot format (start - end)
         Frequency freqRadius = Frequency.ofHz(xc.ochSignal().channelSpacing().frequency().asHz() / 2);
@@ -501,7 +491,7 @@ public class LumentumNetconfRoadmFlowRuleProgrammable extends AbstractHandlerBeh
         try {
             return session.editConfig(xcString);
         } catch (NetconfException e) {
-            log.error("Failed to edit the CrossConnect edit-cfg for device {}",
+            log.error("Failed to edit the CrossConnect edid-cfg for device {}",
                       handler().data().deviceId(), e);
             log.debug("Failed configuration {}", xcString);
             return false;
@@ -545,13 +535,11 @@ public class LumentumNetconfRoadmFlowRuleProgrammable extends AbstractHandlerBeh
      * Generate a valid connectionId, the connectionId is a field required by the device every time
      * a connection is created/edited/removed.
      *
-     * Device only supports connection id < 130
+     *
+     * Device only supports connection id < 100
      */
-    private int generateConnectionId(LumentumFlowRule xc) {
-
-       int moduleNew = xc.getConnectionModule();
-
-        //LUMENTUM_ROADM20_MAX_CONNECTIONS =  100, device only supports connection id < 130
+    private int generateConnectionId() {
+        //LUMENTUM_ROADM20_MAX_CONNECTIONS =  100, device only supports connection id < 100
         for (int i = 1; i < LUMENTUM_ROADM20_MAX_CONNECTIONS; i++) {
             Set<FlowRule> rulesForDevice = getConnectionCache().get(did());
 
@@ -559,7 +547,6 @@ public class LumentumNetconfRoadmFlowRuleProgrammable extends AbstractHandlerBeh
                 return 1;
             } else {
                 Set<Integer> connIds = rulesForDevice.stream()
-                        .filter(flow -> ((LumentumFlowRule) flow).getConnectionModule() == moduleNew)
                         .map(flow -> ((LumentumFlowRule) flow).getConnectionId())
                         .collect(Collectors.toSet());
 

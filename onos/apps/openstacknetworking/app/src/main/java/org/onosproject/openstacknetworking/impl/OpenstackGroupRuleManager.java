@@ -19,7 +19,6 @@ import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.group.DefaultGroupDescription;
-import org.onosproject.net.group.Group;
 import org.onosproject.net.group.GroupBucket;
 import org.onosproject.net.group.GroupBuckets;
 import org.onosproject.net.group.GroupDescription;
@@ -65,19 +64,14 @@ public class OpenstackGroupRuleManager implements OpenstackGroupRuleService {
     public void setRule(ApplicationId appId, DeviceId deviceId, int groupId,
                         GroupDescription.Type type, List<GroupBucket> buckets,
                         boolean install) {
-        Group group = groupService.getGroup(deviceId, getGroupKey(groupId));
         if (install) {
-            if (group == null) {
-                GroupDescription groupDesc = new DefaultGroupDescription(deviceId,
-                        type, new GroupBuckets(buckets), getGroupKey(groupId), groupId, appId);
-                groupService.addGroup(groupDesc);
-                log.debug("Adding group table rule {}", groupId);
-            }
+            GroupDescription groupDesc = new DefaultGroupDescription(deviceId,
+                    type, new GroupBuckets(buckets), getGroupKey(groupId), groupId, appId);
+            groupService.addGroup(groupDesc);
+            log.info("Adding group rule {}", groupId);
         } else {
-            if (group != null) {
-                groupService.removeGroup(deviceId, getGroupKey(groupId), appId);
-                log.debug("Removing group table rule {}", groupId);
-            }
+            groupService.removeGroup(deviceId, getGroupKey(groupId), appId);
+            log.info("Removing group rule {}", groupId);
         }
     }
 
@@ -89,22 +83,14 @@ public class OpenstackGroupRuleManager implements OpenstackGroupRuleService {
     @Override
     public void setBuckets(ApplicationId appId, DeviceId deviceId,
                            int groupId, List<GroupBucket> buckets, boolean install) {
-        if (!hasGroup(deviceId, groupId)) {
-            return;
-        }
         if (install) {
-            // we add the buckets into the group, only if the buckets do not exist
-            // in the given group
-            Group group = groupService.getGroup(deviceId, getGroupKey(groupId));
-            if (group.buckets() != null && !group.buckets().buckets().containsAll(buckets)) {
-                groupService.addBucketsToGroup(deviceId, getGroupKey(groupId),
-                        new GroupBuckets(buckets), getGroupKey(groupId), appId);
-                log.debug("Adding buckets for group rule {}", groupId);
-            }
+            groupService.addBucketsToGroup(deviceId, getGroupKey(groupId),
+                    new GroupBuckets(buckets), getGroupKey(groupId), appId);
+            log.info("Adding buckets for group rule {}", groupId);
         } else {
             groupService.removeBucketsFromGroup(deviceId, getGroupKey(groupId),
                     new GroupBuckets(buckets), getGroupKey(groupId), appId);
-            log.debug("Removing buckets for group rule {}", groupId);
+            log.info("Removing buckets for group rule {}", groupId);
         }
     }
 

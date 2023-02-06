@@ -37,8 +37,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public class ServicesBundle {
 
-    private ServiceDirectory directory;
-
     private ClusterService clusterService;
 
     private TopologyService topologyService;
@@ -62,7 +60,6 @@ public class ServicesBundle {
      */
     public ServicesBundle(ServiceDirectory directory) {
         checkNotNull(directory, "Directory cannot be null");
-        this.directory = directory;
 
         clusterService = directory.get(ClusterService.class);
 
@@ -186,16 +183,5 @@ public class ServicesBundle {
      */
     public PortStatisticsService portStats() {
         return portStatsService;
-    }
-
-    /**
-     * Returns the implementation of the specified service class.
-     *
-     * @param serviceClass service class
-     * @param <T>          class of service
-     * @return implementation of the service class
-     */
-    public <T> T get(Class<T> serviceClass) {
-        return directory.get(serviceClass);
     }
 }

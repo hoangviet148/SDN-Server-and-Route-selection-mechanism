@@ -122,6 +122,7 @@ public class NetconfSessionMinaImpl extends AbstractNetconfSession {
     private static final String NETCONF_11_CAPABILITY = "urn:ietf:params:netconf:base:1.1";
     private static final String NETCONF_CLIENT_CAPABILITY = "netconfClientCapability";
     private static final String NOTIFICATION_STREAM = "notificationStream";
+    private static final String SSH_KEY_PATH = "/root/.ssh/id_rsa";
     private static final String EMPTY_STRING = "";
 
     private static ServiceDirectory directory = new DefaultServiceDirectory();
@@ -256,17 +257,16 @@ public class NetconfSessionMinaImpl extends AbstractNetconfSession {
                 deviceInfo.port())
                 .verify(connectTimeout, TimeUnit.SECONDS);
         session = connectFuture.getSession();
-        //Using the onos private ssh key at path NetconfControllerImpl.sshKeyPath
-        String sshKeyPath = NetconfControllerImpl.sshKeyPath;
+        //Using the onos private ssh key at path SSH_KEY_PATH
         if (deviceInfo.password().equals(EMPTY_STRING)) {
-            try (PEMParser pemParser = new PEMParser(new FileReader(sshKeyPath))) {
+            try (PEMParser pemParser = new PEMParser(new FileReader(SSH_KEY_PATH))) {
                 JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider(BouncyCastleProvider.PROVIDER_NAME);
                 try {
                     KeyPair kp = converter.getKeyPair((PEMKeyPair) pemParser.readObject());
                     session.addPublicKeyIdentity(kp);
                 } catch (IOException e) {
                     throw new NetconfException("Failed to authenticate session. Please check if ssk key is generated" +
-" on ONOS host machine at path " + sshKeyPath + " : ", e);
+" on ONOS host machine at path " + SSH_KEY_PATH + " : ", e);
                 }
             }
         } else {
@@ -580,7 +580,7 @@ public class NetconfSessionMinaImpl extends AbstractNetconfSession {
 
         String rpc = request;
         //  - assign message-id
-        int msgId = messageIdInteger.getAndIncrement();
+        int msgId = messageIdInteger.incrementAndGet();
         //  - re-write request to insert message-id
         // FIXME avoid using formatRequestMessageId
         rpc = formatRequestMessageId(rpc, msgId);

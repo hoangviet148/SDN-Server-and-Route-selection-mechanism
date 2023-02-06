@@ -15,7 +15,6 @@
  */
 package org.onosproject.net.meter;
 
-import org.onosproject.core.ApplicationId;
 import org.onosproject.event.ListenerService;
 import org.onosproject.net.DeviceId;
 
@@ -42,18 +41,8 @@ public interface MeterService
      *
      * @param meter a meter to remove
      * @param meterId the meter id of the meter to remove.
-     * @deprecated in onos-2.5, replace MeterId with MeterCellId
      */
-    @Deprecated
     void withdraw(MeterRequest meter, MeterId meterId);
-
-    /**
-     * Remove a meter from the system and the dataplane.
-     *
-     * @param meter a meter to remove
-     * @param meterCellId the meter cell id of the meter to remove.
-     */
-    void withdraw(MeterRequest meter, MeterCellId meterCellId);
 
     /**
      * Fetch the meter by the meter id.
@@ -61,19 +50,8 @@ public interface MeterService
      * @param deviceId a device id
      * @param id a meter id
      * @return a meter
-     * @deprecated in onos-2.5, Replace MeterId with MeterCellId
      */
-    @Deprecated
     Meter getMeter(DeviceId deviceId, MeterId id);
-
-    /**
-     * Fetch the meter by the meter id.
-     *
-     * @param deviceId a device id
-     * @param id a meter cell id
-     * @return a meter
-     */
-    Meter getMeter(DeviceId deviceId, MeterCellId id);
 
     /**
      * Fetches all the meters.
@@ -91,23 +69,12 @@ public interface MeterService
     Collection<Meter> getMeters(DeviceId deviceId);
 
     /**
-     * Fetches the meters by the device id and scope.
-     *
-     * @param deviceId a device id
-     * @param scope meters scope
-     * @return a collection of meters
-     */
-    Collection<Meter> getMeters(DeviceId deviceId, MeterScope scope);
-
-    /**
      * Allocates a new meter id in the system.
      *
      * @param deviceId the device id
      * @return the allocated meter id, null if there is an internal error
      * or there are no meter ids available
-     * @deprecated in onos-2.5
      */
-    @Deprecated
     MeterId allocateMeterId(DeviceId deviceId);
 
     /**
@@ -115,27 +82,15 @@ public interface MeterService
      *
      * @param deviceId the device id
      * @param meterId the id to be freed
-     * @deprecated in onos-2.5
      */
-    @Deprecated
     void freeMeterId(DeviceId deviceId, MeterId meterId);
 
     /**
      * Purges all the meters on the specified device.
      * @param deviceId device identifier
      */
-    default void purgeMeters(DeviceId deviceId) {
-        throw new UnsupportedOperationException("purgeMeters not implemented");
-    }
-
-    /**
-     * Purges all the meters on the given device and for the given application.
-     *
-     * @param deviceId device identifier
-     * @param appId application identifier
-     */
-    default void purgeMeters(DeviceId deviceId, ApplicationId appId) {
-        throw new UnsupportedOperationException("purgeMeter not implemented");
+    default void purgeMeters(DeviceId deviceId){
+        //Default implementation does nothing
     }
 
 }

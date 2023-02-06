@@ -19,11 +19,8 @@ import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Striped;
 import org.onlab.util.KryoNamespace;
 import org.onlab.util.SharedScheduledExecutors;
-import org.onosproject.codec.CodecService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.inbandtelemetry.rest.IntIntentCodec;
-import org.onosproject.net.behaviour.inbandtelemetry.IntReportConfig;
 import org.onosproject.net.behaviour.inbandtelemetry.IntMetadataType;
 import org.onosproject.net.behaviour.inbandtelemetry.IntDeviceConfig;
 import org.onosproject.inbandtelemetry.api.IntIntent;
@@ -37,17 +34,9 @@ import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.MastershipRole;
 import org.onosproject.net.PortNumber;
-import org.onosproject.net.config.ConfigFactory;
-import org.onosproject.net.config.NetworkConfigEvent;
-import org.onosproject.net.config.NetworkConfigListener;
-import org.onosproject.net.config.NetworkConfigRegistry;
-import org.onosproject.net.config.NetworkConfigService;
-import org.onosproject.net.config.basics.SubjectFactories;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.net.flow.DefaultTrafficSelector;
-import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.host.HostEvent;
 import org.onosproject.net.host.HostListener;
 import org.onosproject.net.host.HostService;
@@ -69,12 +58,12 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.slf4j.Logger;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -82,8 +71,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
-import static org.onlab.util.Tools.groupedThreads;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -107,28 +94,19 @@ public class SimpleIntManager implements IntService {
     private static final String APP_NAME = "org.onosproject.inbandtelemetry";
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected CoreService coreService;
+    private CoreService coreService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected DeviceService deviceService;
+    private DeviceService deviceService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected StorageService storageService;
+    private StorageService storageService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected MastershipService mastershipService;
+    private MastershipService mastershipService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected HostService hostService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected NetworkConfigService netcfgService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected NetworkConfigRegistry netcfgRegistry;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected CodecService codecService;
+    private HostService hostService;
 
     private final Striped<Lock> deviceLocks = Striped.lock(10);
 
@@ -149,18 +127,6 @@ public class SimpleIntManager implements IntService {
     private final InternalIntStartedListener intStartedListener = new InternalIntStartedListener();
     private final InternalDeviceToConfigureListener devicesToConfigureListener =
             new InternalDeviceToConfigureListener();
-    private final NetworkConfigListener appConfigListener = new IntAppConfigListener();
-
-    private final ConfigFactory<ApplicationId, IntReportConfig> intAppConfigFactory =
-            new ConfigFactory<>(SubjectFactories.APP_SUBJECT_FACTORY,
-                    IntReportConfig.class, "report") {
-                @Override
-                public IntReportConfig createConfig() {
-                    return new IntReportConfig();
-                }
-            };
-
-    protected ExecutorService eventExecutor;
 
     @Activate
     public void activate() {
@@ -178,7 +144,7 @@ public class SimpleIntManager implements IntService {
                 .register(IntIntent.TelemetryMode.class)
                 .register(IntDeviceConfig.class)
                 .register(IntDeviceConfig.TelemetrySpec.class);
-        codecService.registerCodec(IntIntent.class, new IntIntentCodec());
+
         devicesToConfigure = storageService.<DeviceId, Long>consistentMapBuilder()
                 .withSerializer(Serializer.using(serializer.build()))
                 .withName("onos-int-devices-to-configure")
@@ -216,29 +182,11 @@ public class SimpleIntManager implements IntService {
         // Bootstrap config for already existing devices.
         triggerAllDeviceConfigure();
 
-        // Bootstrap core event executor before adding listener
-        eventExecutor = newSingleThreadScheduledExecutor(groupedThreads(
-                "onos/int", "events-%d", log));
-
         hostService.addListener(hostListener);
         deviceService.addListener(deviceListener);
 
-        netcfgRegistry.registerConfigFactory(intAppConfigFactory);
-        netcfgService.addListener(appConfigListener);
-        // Initialize the INT report
-        IntReportConfig reportConfig = netcfgService.getConfig(appId, IntReportConfig.class);
-        if (reportConfig != null) {
-            IntDeviceConfig intDeviceConfig = IntDeviceConfig.builder()
-                    .withMinFlowHopLatencyChangeNs(reportConfig.minFlowHopLatencyChangeNs())
-                    .withCollectorPort(reportConfig.collectorPort())
-                    .withCollectorIp(reportConfig.collectorIp())
-                    .enabled(true)
-                    .build();
-            setConfig(intDeviceConfig);
-        }
-
         startInt();
-        log.info("Started");
+        log.info("Started", appId.id());
     }
 
     @Deactivate
@@ -255,7 +203,6 @@ public class SimpleIntManager implements IntService {
         devicesToConfigure.removeListener(devicesToConfigureListener);
         devicesToConfigure.destroy();
         devicesToConfigure = null;
-        codecService.unregisterCodec(IntIntent.class);
         // Cancel tasks (if any).
         scheduledDeviceTasks.values().forEach(f -> {
             f.cancel(true);
@@ -269,10 +216,6 @@ public class SimpleIntManager implements IntService {
         });
         // Clean up INT rules from existing devices.
         deviceService.getDevices().forEach(d -> cleanupDevice(d.id()));
-        netcfgService.removeListener(appConfigListener);
-        netcfgRegistry.unregisterConfigFactory(intAppConfigFactory);
-        eventExecutor.shutdownNow();
-        eventExecutor = null;
         log.info("Deactivated");
     }
 
@@ -324,11 +267,7 @@ public class SimpleIntManager implements IntService {
     public void removeIntIntent(IntIntentId intentId) {
         checkNotNull(intentId);
         // Intent map event will trigger device configure.
-        if (!intentMap.containsKey(intentId)) {
-            log.warn("INT intent {} does not exists, skip removing the intent.", intentId);
-            return;
-        }
-        intentMap.remove(intentId);
+        intentMap.remove(intentId).value();
     }
 
     @Override
@@ -404,7 +343,7 @@ public class SimpleIntManager implements IntService {
         device.as(IntProgrammable.class).cleanup();
     }
 
-    protected boolean configDevice(DeviceId deviceId) {
+    private boolean configDevice(DeviceId deviceId) {
         // Returns true if config was successful, false if not and a clean up is
         // needed.
         final Device device = deviceService.getDevice(deviceId);
@@ -418,11 +357,12 @@ public class SimpleIntManager implements IntService {
         }
 
         final boolean isEdge = !hostService.getConnectedHosts(deviceId).isEmpty();
-        final IntDeviceRole intDeviceRole =
-                isEdge ? IntDeviceRole.SOURCE_SINK : IntDeviceRole.TRANSIT;
+        final IntDeviceRole intDeviceRole = isEdge
+                ? IntDeviceRole.SOURCE_SINK
+                : IntDeviceRole.TRANSIT;
 
         log.info("Started programming of INT device {} with role {}...",
-                deviceId, intDeviceRole);
+                 deviceId, intDeviceRole);
 
         final IntProgrammable intProg = device.as(IntProgrammable.class);
 
@@ -436,16 +376,12 @@ public class SimpleIntManager implements IntService {
             return false;
         }
 
-        boolean supportSource = intProg.supportsFunctionality(IntProgrammable.IntFunctionality.SOURCE);
-        boolean supportSink = intProg.supportsFunctionality(IntProgrammable.IntFunctionality.SINK);
-        boolean supportPostcard = intProg.supportsFunctionality(IntProgrammable.IntFunctionality.POSTCARD);
-
-        if (intDeviceRole != IntDeviceRole.SOURCE_SINK && !supportPostcard) {
-            // Stop here, no more configuration needed for transit devices unless it support postcard.
+        if (intDeviceRole != IntDeviceRole.SOURCE_SINK) {
+            // Stop here, no more configuration needed for transit devices.
             return true;
         }
 
-        if (supportSink || supportPostcard) {
+        if (intProg.supportsFunctionality(IntProgrammable.IntFunctionality.SINK)) {
             if (!intProg.setupIntConfig(intConfig.get())) {
                 log.warn("Unable to apply INT report config on {}", deviceId);
                 return false;
@@ -461,14 +397,14 @@ public class SimpleIntManager implements IntService {
                 .collect(Collectors.toSet());
 
         for (PortNumber port : hostPorts) {
-            if (supportSource) {
+            if (intProg.supportsFunctionality(IntProgrammable.IntFunctionality.SOURCE)) {
                 log.info("Setting port {}/{} as INT source port...", deviceId, port);
                 if (!intProg.setSourcePort(port)) {
                     log.warn("Unable to set INT source port {} on {}", port, deviceId);
                     return false;
                 }
             }
-            if (supportSink) {
+            if (intProg.supportsFunctionality(IntProgrammable.IntFunctionality.SINK)) {
                 log.info("Setting port {}/{} as INT sink port...", deviceId, port);
                 if (!intProg.setSinkPort(port)) {
                     log.warn("Unable to set INT sink port {} on {}", port, deviceId);
@@ -477,32 +413,28 @@ public class SimpleIntManager implements IntService {
             }
         }
 
-        if (!supportSource && !supportPostcard) {
-            // Stop here, no more configuration needed for sink devices unless
-            // it supports postcard mode.
+        if (!intProg.supportsFunctionality(IntProgrammable.IntFunctionality.SOURCE)) {
+            // Stop here, no more configuration needed for sink devices.
             return true;
         }
 
         // Apply intents.
         // This is a trivial implementation where we simply get the
-        // corresponding INT objective from an intent and we apply to all
-        // device which support reporting.
+        // corresponding INT objective from an intent and we apply to all source
+        // device.
+        final Collection<IntObjective> objectives = intentMap.values().stream()
+                .map(v -> getIntObjective(v.value()))
+                .collect(Collectors.toList());
         int appliedCount = 0;
-        for (Versioned<IntIntent> versionedIntent : intentMap.values()) {
-            IntIntent intent = versionedIntent.value();
-            IntObjective intObjective = getIntObjective(intent);
-            if (intent.telemetryMode() == IntIntent.TelemetryMode.INBAND_TELEMETRY && supportSource) {
-                intProg.addIntObjective(intObjective);
-                appliedCount++;
-            } else if (intent.telemetryMode() == IntIntent.TelemetryMode.POSTCARD && supportPostcard) {
-                intProg.addIntObjective(intObjective);
-                appliedCount++;
-            } else {
-                log.warn("Device {} does not support intent {}.", deviceId, intent);
+        for (IntObjective objective : objectives) {
+            if (intProg.addIntObjective(objective)) {
+                appliedCount = appliedCount + 1;
             }
         }
+
         log.info("Completed programming of {}, applied {} INT objectives of {} total",
-                deviceId, appliedCount, intentMap.size());
+                 deviceId, appliedCount, objectives.size());
+
         return true;
     }
 
@@ -520,34 +452,30 @@ public class SimpleIntManager implements IntService {
     private class InternalHostListener implements HostListener {
         @Override
         public void event(HostEvent event) {
-            eventExecutor.execute(() -> {
-                final DeviceId deviceId = event.subject().location().deviceId();
-                triggerDeviceConfigure(deviceId);
-            });
+            final DeviceId deviceId = event.subject().location().deviceId();
+            triggerDeviceConfigure(deviceId);
         }
     }
 
     private class InternalDeviceListener implements DeviceListener {
         @Override
         public void event(DeviceEvent event) {
-            eventExecutor.execute(() -> {
-                switch (event.type()) {
-                    case DEVICE_ADDED:
-                    case DEVICE_UPDATED:
-                    case DEVICE_REMOVED:
-                    case DEVICE_SUSPENDED:
-                    case DEVICE_AVAILABILITY_CHANGED:
-                    case PORT_ADDED:
-                    case PORT_UPDATED:
-                    case PORT_REMOVED:
-                        triggerDeviceConfigure(event.subject().id());
-                        return;
-                    case PORT_STATS_UPDATED:
-                        return;
-                    default:
-                        log.warn("Unknown device event type {}", event.type());
-                }
-            });
+            switch (event.type()) {
+                case DEVICE_ADDED:
+                case DEVICE_UPDATED:
+                case DEVICE_REMOVED:
+                case DEVICE_SUSPENDED:
+                case DEVICE_AVAILABILITY_CHANGED:
+                case PORT_ADDED:
+                case PORT_UPDATED:
+                case PORT_REMOVED:
+                    triggerDeviceConfigure(event.subject().id());
+                    return;
+                case PORT_STATS_UPDATED:
+                    return;
+                default:
+                    log.warn("Unknown device event type {}", event.type());
+            }
         }
     }
 
@@ -595,62 +523,5 @@ public class SimpleIntManager implements IntService {
                 oldTask.cancel(false);
             }
         }
-    }
-
-    private class IntAppConfigListener implements NetworkConfigListener {
-
-        @Override
-        public void event(NetworkConfigEvent event) {
-            eventExecutor.execute(() -> {
-                if (event.configClass() == IntReportConfig.class) {
-                    switch (event.type()) {
-                        case CONFIG_ADDED:
-                        case CONFIG_UPDATED:
-                            event.config()
-                                    .map(config -> (IntReportConfig) config)
-                                    .ifPresent(config -> {
-                                        IntDeviceConfig intDeviceConfig = IntDeviceConfig.builder()
-                                                .withMinFlowHopLatencyChangeNs(config.minFlowHopLatencyChangeNs())
-                                                .withCollectorPort(config.collectorPort())
-                                                .withCollectorIp(config.collectorIp())
-                                                .enabled(true)
-                                                .build();
-                                        setConfig(intDeviceConfig);
-
-                                        // For each watched subnet, we install two INT rules.
-                                        // One match on the source, another match on the destination.
-                                        intentMap.clear();
-                                        config.watchSubnets().forEach(subnet -> {
-                                            IntIntent.Builder intIntentBuilder = IntIntent.builder()
-                                                    .withReportType(IntIntent.IntReportType.TRACKED_FLOW)
-                                                    .withReportType(IntIntent.IntReportType.DROPPED_PACKET)
-                                                    .withReportType(IntIntent.IntReportType.CONGESTED_QUEUE)
-                                                    .withTelemetryMode(IntIntent.TelemetryMode.POSTCARD);
-                                            if (subnet.prefixLength() == 0) {
-                                                // Special case, match any packet
-                                                installIntIntent(intIntentBuilder
-                                                        .withSelector(DefaultTrafficSelector.emptySelector())
-                                                        .build());
-                                            } else {
-                                                TrafficSelector selector = DefaultTrafficSelector.builder()
-                                                        .matchIPSrc(subnet)
-                                                        .build();
-                                                installIntIntent(intIntentBuilder.withSelector(selector).build());
-                                                selector = DefaultTrafficSelector.builder()
-                                                        .matchIPDst(subnet)
-                                                        .build();
-                                                installIntIntent(intIntentBuilder.withSelector(selector).build());
-                                            }
-                                        });
-                                    });
-                            break;
-                        // TODO: Support removing INT config.
-                        default:
-                            break;
-                    }
-                }
-            });
-        }
-
     }
 }

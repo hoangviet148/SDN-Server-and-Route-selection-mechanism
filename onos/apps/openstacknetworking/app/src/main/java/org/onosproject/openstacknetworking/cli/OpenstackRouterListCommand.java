@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.deriveResourceName;
 import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.modelEntityToJson;
 import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.prettyJson;
 
@@ -56,7 +55,7 @@ public class OpenstackRouterListCommand extends AbstractShellCommand {
     @Override
     protected void doExecute() {
         List<Router> routers = Lists.newArrayList(routerService.routers());
-        routers.sort(Comparator.comparing(Router::getId));
+        routers.sort(Comparator.comparing(Router::getName));
 
         if (outputJson()) {
             print("%s", json(routers));
@@ -81,7 +80,7 @@ public class OpenstackRouterListCommand extends AbstractShellCommand {
                 routerService.routerInterfaces(router.getId()).forEach(iface -> {
                     internals.add(getRouterIfaceIp(iface));
                 });
-                print(FORMAT, router.getId(), deriveResourceName(router), externals, internals);
+                print(FORMAT, router.getId(), router.getName(), externals, internals);
             }
         }
     }

@@ -92,6 +92,12 @@ public class DefaultWorkflowContext extends WorkflowContext {
     private transient WorkplaceStore workplaceStore;
 
     /**
+     * Service reference for eventMap store.
+     */
+    private transient ContextEventMapStore eventMapStore;
+
+
+    /**
      * Constructor of DefaultWorkflowContext.
      * @param builder default workflow context builder
      */
@@ -180,7 +186,7 @@ public class DefaultWorkflowContext extends WorkflowContext {
 
     @Override
     public void waitAnyCompletion(Class<? extends Event> eventType, Set<String> eventHint,
-                                  WorkExecutor eventGenerator, long timeoutMs) {
+                               WorkExecutor eventGenerator, long timeoutMs) {
         this.completionEventType = eventType;
         this.completionEventHintSet = new HashSet<>();
         this.completionEventHintSet.addAll(eventHint);
@@ -214,6 +220,11 @@ public class DefaultWorkflowContext extends WorkflowContext {
     }
 
     @Override
+    public void registerTriggerEvent(Class<? extends Event> event, Set<String> eventHintSet) throws WorkflowException {
+        eventMapStore.registerTriggerFlag(event.getName(), eventHintSet, this.name());
+    }
+
+    @Override
     public void setWorkflowExecutionService(WorkflowExecutionService workflowExecutionService) {
         this.workflowExecutionService = workflowExecutionService;
     }
@@ -241,6 +252,17 @@ public class DefaultWorkflowContext extends WorkflowContext {
     @Override
     public WorkplaceStore workplaceStore() {
         return workplaceStore;
+    }
+
+
+    @Override
+    public void setEventMapStore(ContextEventMapStore contextEventMapStore) {
+        this.eventMapStore = contextEventMapStore;
+    }
+
+    @Override
+    public ContextEventMapStore eventMapStore() {
+        return eventMapStore;
     }
 
     public <T> T getService(Class<T> serviceClass) throws WorkflowException {

@@ -18,7 +18,6 @@ package org.onosproject.rest.resources;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.onosproject.app.ApplicationAdminService;
 import org.onosproject.app.ApplicationException;
-import org.onosproject.cluster.ComponentsMonitorService;
 import org.onosproject.core.Application;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
@@ -39,9 +38,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Set;
-import org.slf4j.Logger;
 
-import static org.slf4j.LoggerFactory.getLogger;
 import static org.onlab.util.Tools.nullIsNotFound;
 import static org.onlab.util.Tools.readTreeFromStream;
 
@@ -51,13 +48,8 @@ import static org.onlab.util.Tools.readTreeFromStream;
 @Path("applications")
 public class ApplicationsWebResource extends AbstractWebResource {
 
-    private static final Logger log = getLogger(ApplicationsWebResource.class);
-
-
     private static final String APP_ID_NOT_FOUND = "Application ID is not found";
     private static final String APP_NOT_FOUND = "Application is not found";
-    private static final String APP_READY = "ready";
-    private static final String APP_PENDING = "pending";
 
     private static final String URL = "url";
     private static final String ACTIVATE = "activate";
@@ -88,29 +80,8 @@ public class ApplicationsWebResource extends AbstractWebResource {
     @Path("{name}")
     public Response getApp(@PathParam("name") String name) {
         ApplicationAdminService service = get(ApplicationAdminService.class);
-        ApplicationId appId = nullIsNotFound(service.getId(name), APP_NOT_FOUND + ":" + name);
+        ApplicationId appId = nullIsNotFound(service.getId(name), APP_NOT_FOUND);
         return response(service, appId);
-    }
-
-    /**
-     * Get application health.
-     *
-     * @param name application name
-     * @return 200 OK with app health in the body; 404 if app is not found
-     */
-    @GET
-    @Path("{name}/health")
-    public Response health(@PathParam("name") String name) {
-        ApplicationAdminService service = get(ApplicationAdminService.class);
-        ApplicationId appId = service.getId(name);
-        nullIsNotFound(appId, APP_ID_NOT_FOUND + ": " + name);
-
-        Application app = service.getApplication(appId);
-        nullIsNotFound(app, APP_NOT_FOUND + ": " + appId);
-
-        ComponentsMonitorService componentsMonitorService = get(ComponentsMonitorService.class);
-        boolean ready = componentsMonitorService.isFullyStarted(app.features());
-        return Response.ok(mapper().createObjectNode().put("message", ready ? APP_READY : APP_PENDING)).build();
     }
 
     /**
@@ -202,7 +173,7 @@ public class ApplicationsWebResource extends AbstractWebResource {
     @Path("{name}/active")
     public Response activateApp(@PathParam("name") String name) {
         ApplicationAdminService service = get(ApplicationAdminService.class);
-        ApplicationId appId = nullIsNotFound(service.getId(name), APP_NOT_FOUND + ": " + name);
+        ApplicationId appId = nullIsNotFound(service.getId(name), APP_NOT_FOUND);
         service.activate(appId);
         return response(service, appId);
     }
@@ -254,7 +225,7 @@ public class ApplicationsWebResource extends AbstractWebResource {
     @Path("{name}/bits")
     public Response getAppBits(@PathParam("name") String name) {
         ApplicationAdminService service = get(ApplicationAdminService.class);
-        ApplicationId appId = nullIsNotFound(service.getId(name), APP_ID_NOT_FOUND + ": " + name);
+        ApplicationId appId = nullIsNotFound(service.getId(name), APP_ID_NOT_FOUND);
         InputStream bits = service.getApplicationArchive(appId);
         return ok(bits).build();
     }
@@ -299,13 +270,12 @@ public class ApplicationsWebResource extends AbstractWebResource {
     }
 
     private Response response(ApplicationAdminService service, ApplicationId appId) {
-        Application app = nullIsNotFound(service.getApplication(appId),
-                                         APP_NOT_FOUND + ": " + appId);
+        Application app = nullIsNotFound(service.getApplication(appId), APP_NOT_FOUND);
         return ok(codec(Application.class).encode(app, this)).build();
     }
 
     private Response response(ApplicationId appId) {
-        ApplicationId checkedAppId = nullIsNotFound(appId, APP_ID_NOT_FOUND + ": " + appId);
+        ApplicationId checkedAppId = nullIsNotFound(appId, APP_ID_NOT_FOUND);
         return ok(codec(ApplicationId.class).encode(checkedAppId, this)).build();
     }
 }

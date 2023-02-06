@@ -33,11 +33,11 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <karaf.version>4.2.14</karaf.version>
+        <karaf.version>4.2.6</karaf.version>
         <maven.version.min>3.3.9</maven.version.min>
         <java.version.min><!-- JAVA_VERSION --></java.version.min>
         <onos.version><!-- ONOS_VERSION --></onos.version>
-        <errorprone.version>2.3.4</errorprone.version>
+        <errorprone.version>2.3.3</errorprone.version>
     </properties>
 
     <dependencyManagement>
@@ -274,7 +274,7 @@
                     <artifactId>onos-maven-plugin</artifactId>
                     <!-- This version needs to be updated manually when changes
                     are made to onos-maven-plugin -->
-                    <version>2.4.0</version>
+                    <version>2.2.1</version>
                     <executions>
                         <execution>
                             <id>cfg</id>

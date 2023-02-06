@@ -19,7 +19,6 @@ package org.onosproject.net.flowobjective;
  * Represents next action in the NextObjective.
  */
 public interface NextTreatment {
-    int DEFAULT_WEIGHT = 1;
     /**
      * Types of next action.
      */
@@ -41,10 +40,4 @@ public interface NextTreatment {
      * @return type
      */
     Type type();
-    /**
-     * weight of this next action.
-     *
-     * @return weight
-     */
-    int weight();
 }

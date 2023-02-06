@@ -42,10 +42,61 @@ control Next (inout parsed_headers_t hdr,
     }
 
     @hidden
+    action set_mpls_label(mpls_label_t label) {
+        fabric_metadata.mpls_label = label;
+    }
+
+    @hidden
     action routing(port_num_t port_num, mac_addr_t smac, mac_addr_t dmac) {
         rewrite_smac(smac);
         rewrite_dmac(dmac);
         output(port_num);
+    }
+
+    @hidden
+    action mpls_routing(port_num_t port_num, mac_addr_t smac, mac_addr_t dmac,
+                        mpls_label_t label) {
+        set_mpls_label(label);
+        routing(port_num, smac, dmac);
+    }
+
+    /*
+     * Next VLAN table.
+     * Modify VLAN ID based on next ID.
+     */
+    direct_counter(CounterType.packets_and_bytes) next_vlan_counter;
+
+    action set_vlan(vlan_id_t vlan_id) {
+        fabric_metadata.vlan_id = vlan_id;
+        next_vlan_counter.count();
+    }
+
+#ifdef WITH_DOUBLE_VLAN_TERMINATION
+    action set_double_vlan(vlan_id_t outer_vlan_id, vlan_id_t inner_vlan_id) {
+        set_vlan(outer_vlan_id);
+        fabric_metadata.push_double_vlan = _TRUE;
+        fabric_metadata.inner_vlan_id = inner_vlan_id;
+#ifdef WITH_BNG
+        fabric_metadata.bng.s_tag = outer_vlan_id;
+        fabric_metadata.bng.c_tag = inner_vlan_id;
+#endif // WITH_BNG
+    }
+#endif // WITH_DOUBLE_VLAN_TERMINATION
+
+    table next_vlan {
+        key = {
+            fabric_metadata.next_id: exact @name("next_id");
+        }
+        actions = {
+            set_vlan;
+#ifdef WITH_DOUBLE_VLAN_TERMINATION
+            set_double_vlan;
+#endif // WITH_DOUBLE_VLAN_TERMINATION
+            @defaultonly nop;
+        }
+        const default_action = nop();
+        counters = next_vlan_counter;
+        size = NEXT_VLAN_TABLE_SIZE;
     }
 
 #ifdef WITH_XCONNECT
@@ -98,6 +149,12 @@ control Next (inout parsed_headers_t hdr,
         simple_counter.count();
     }
 
+    action mpls_routing_simple(port_num_t port_num, mac_addr_t smac, mac_addr_t dmac,
+                               mpls_label_t label) {
+        mpls_routing(port_num, smac, dmac, label);
+        simple_counter.count();
+    }
+
     table simple {
         key = {
             fabric_metadata.next_id: exact @name("next_id");
@@ -105,6 +162,7 @@ control Next (inout parsed_headers_t hdr,
         actions = {
             output_simple;
             routing_simple;
+            mpls_routing_simple;
             @defaultonly nop;
         }
         const default_action = nop();
@@ -135,6 +193,12 @@ control Next (inout parsed_headers_t hdr,
         hashed_counter.count();
     }
 
+    action mpls_routing_hashed(port_num_t port_num, mac_addr_t smac, mac_addr_t dmac,
+                               mpls_label_t label) {
+        mpls_routing(port_num, smac, dmac, label);
+        hashed_counter.count();
+    }
+
     table hashed {
         key = {
             fabric_metadata.next_id: exact @name("next_id");
@@ -147,6 +211,7 @@ control Next (inout parsed_headers_t hdr,
         actions = {
             output_hashed;
             routing_hashed;
+            mpls_routing_hashed;
             @defaultonly nop;
         }
         implementation = hashed_selector;
@@ -193,6 +258,7 @@ control Next (inout parsed_headers_t hdr,
         hashed.apply();
 #endif // WITH_HASHED_NEXT
         multicast.apply();
+        next_vlan.apply();
     }
 }
 
@@ -217,7 +283,7 @@ control EgressNextControl (inout parsed_headers_t hdr,
     }
 
     @hidden
-    action push_outer_vlan() {
+    action push_vlan() {
         // If VLAN is already valid, we overwrite it with a potentially new VLAN
         // ID, and same CFI, PRI, and eth_type values found in ingress.
         hdr.vlan_tag.setValid();
@@ -242,23 +308,12 @@ control EgressNextControl (inout parsed_headers_t hdr,
 
     /*
      * Egress VLAN Table.
-     * Pushes or Pops the VLAN tag if the pair egress port and VLAN ID is matched.
-     * Instead, it drops the packets on miss.
+     * Pops the VLAN tag if the pair egress port and VLAN ID is matched.
      */
     direct_counter(CounterType.packets_and_bytes) egress_vlan_counter;
 
-    action push_vlan() {
-        push_outer_vlan();
-        egress_vlan_counter.count();
-    }
-
     action pop_vlan() {
         hdr.vlan_tag.setInvalid();
-        egress_vlan_counter.count();
-    }
-
-    action drop() {
-        mark_to_drop(standard_metadata);
         egress_vlan_counter.count();
     }
 
@@ -268,11 +323,10 @@ control EgressNextControl (inout parsed_headers_t hdr,
             standard_metadata.egress_port: exact @name("eg_port");
         }
         actions = {
-            push_vlan;
             pop_vlan;
-            @defaultonly drop;
+            @defaultonly nop;
         }
-        const default_action = drop();
+        const default_action = nop();
         counters = egress_vlan_counter;
         size = EGRESS_VLAN_TABLE_SIZE;
     }
@@ -292,14 +346,20 @@ control EgressNextControl (inout parsed_headers_t hdr,
 #ifdef WITH_DOUBLE_VLAN_TERMINATION
         if (fabric_metadata.push_double_vlan == _TRUE) {
             // Double VLAN termination.
-            push_outer_vlan();
+            push_vlan();
             push_inner_vlan();
         } else {
             // If no push double vlan, inner_vlan_tag must be popped
             hdr.inner_vlan_tag.setInvalid();
 #endif // WITH_DOUBLE_VLAN_TERMINATION
-            // Port-based VLAN tagging; if there is no match drop the packet!
-            egress_vlan.apply();
+            // Port-based VLAN tagging (by default all
+            // ports are assumed tagged)
+            if (!egress_vlan.apply().hit) {
+                // Push VLAN tag if not the default one.
+                if (fabric_metadata.vlan_id != DEFAULT_VLAN_ID) {
+                    push_vlan();
+                }
+            }
 #ifdef WITH_DOUBLE_VLAN_TERMINATION
         }
 #endif // WITH_DOUBLE_VLAN_TERMINATION
@@ -309,12 +369,12 @@ control EgressNextControl (inout parsed_headers_t hdr,
             hdr.mpls.ttl = hdr.mpls.ttl - 1;
             if (hdr.mpls.ttl == 0) mark_to_drop(standard_metadata);
         } else {
-            if(hdr.ipv4.isValid() && fabric_metadata.fwd_type != FWD_BRIDGING) {
+            if(hdr.ipv4.isValid()) {
                 hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
                 if (hdr.ipv4.ttl == 0) mark_to_drop(standard_metadata);
             }
 #ifdef WITH_IPV6
-            else if (hdr.ipv6.isValid() && fabric_metadata.fwd_type != FWD_BRIDGING) {
+            else if (hdr.ipv6.isValid()) {
                 hdr.ipv6.hop_limit = hdr.ipv6.hop_limit - 1;
                 if (hdr.ipv6.hop_limit == 0) mark_to_drop(standard_metadata);
             }

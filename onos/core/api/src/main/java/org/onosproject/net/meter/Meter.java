@@ -37,12 +37,7 @@ public interface Meter extends PiTranslatable, Annotated {
         /**
          * Kilo bits per second.
          */
-        KB_PER_SEC,
-
-        /**
-         * Bytes per second.
-         */
-        BYTES_PER_SEC
+        KB_PER_SEC
     }
 
     /**
@@ -70,13 +65,10 @@ public interface Meter extends PiTranslatable, Annotated {
 
     /**
      * The id of the application which created this meter.
-     * Could be null if the meter is read from the controller southbound.
      *
      * @return an application id
      */
     ApplicationId appId();
-    // TODO: Deprecate this and create a new method returns an Optional ApplicationId
-    // TODO: Or introduce MeterEntry on south and keep this method
 
     /**
      * The unit used within this meter.

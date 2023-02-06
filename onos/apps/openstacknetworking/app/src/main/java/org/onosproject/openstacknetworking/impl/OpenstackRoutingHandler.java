@@ -79,7 +79,6 @@ import static org.onosproject.openstacknetworking.api.Constants.ROUTING_TABLE;
 import static org.onosproject.openstacknetworking.api.Constants.STAT_OUTBOUND_TABLE;
 import static org.onosproject.openstacknetworking.impl.OsgiPropertyConstants.ARP_MODE;
 import static org.onosproject.openstacknetworking.impl.OsgiPropertyConstants.USE_STATEFUL_SNAT;
-import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.deriveResourceName;
 import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.getPropertyValue;
 import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.getPropertyValueAsBoolean;
 import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.tunnelPortNumByNetType;
@@ -201,7 +200,7 @@ public class OpenstackRoutingHandler {
 
         setInternalRoutes(osRouter, osSubnet, true);
         setGatewayRules(osSubnet, osRouter, true);
-        log.info("Connected subnet({}) to {}", osSubnet.getCidr(), deriveResourceName(osRouter));
+        log.info("Connected subnet({}) to {}", osSubnet.getCidr(), osRouter.getName());
     }
 
     private void routerIfaceRemoved(Router osRouter, RouterInterface osRouterIface) {
@@ -222,7 +221,7 @@ public class OpenstackRoutingHandler {
 
         setInternalRoutes(osRouter, osSubnet, false);
         setGatewayRules(osSubnet, osRouter, false);
-        log.info("Disconnected subnet({}) from {}", osSubnet.getCidr(), deriveResourceName(osRouter));
+        log.info("Disconnected subnet({}) from {}", osSubnet.getCidr(), osRouter.getName());
     }
 
     private void setGatewayRules(Subnet osSubnet, Router osRouter, boolean install) {
@@ -659,7 +658,8 @@ public class OpenstackRoutingHandler {
             }
 
             log.debug("Router(name:{}, ID:{}) is created",
-                    deriveResourceName(event.subject()), event.subject().getId());
+                                                    event.subject().getName(),
+                                                    event.subject().getId());
 
             routerUpdated(event.subject());
         }
@@ -670,7 +670,8 @@ public class OpenstackRoutingHandler {
             }
 
             log.debug("Router(name:{}, ID:{}) is updated",
-                    deriveResourceName(event.subject()), event.subject().getId());
+                                                    event.subject().getName(),
+                                                    event.subject().getId());
 
             routerUpdated(event.subject());
         }
@@ -681,7 +682,8 @@ public class OpenstackRoutingHandler {
             }
 
             log.debug("Router(name:{}, ID:{}) is removed",
-                    deriveResourceName(event.subject()), event.subject().getId());
+                                                    event.subject().getName(),
+                                                    event.subject().getId());
 
             routerRemove(event.subject());
         }

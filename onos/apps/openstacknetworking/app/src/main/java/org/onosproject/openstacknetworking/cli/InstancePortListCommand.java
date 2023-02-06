@@ -55,11 +55,7 @@ public class InstancePortListCommand extends AbstractShellCommand {
             for (InstancePort port : instancePorts) {
                 Port neutronPort = osNetService.port(port.portId());
 
-                String vmId = "N/A";
-                if (neutronPort != null) {
-                    vmId = neutronPort.getDeviceId();
-                }
-                print(FORMAT, port.portId(), vmId, port.state(),
+                print(FORMAT, port.portId(), neutronPort.getDeviceId(), port.state(),
                         port.deviceId().toString(), port.portNumber().toLong(),
                         port.ipAddress().toString());
             }

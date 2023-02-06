@@ -75,22 +75,15 @@ class DeviceTaskExecutor<T extends Enum> {
                     return new TaskQueue();
                 }
             });
-    /**
-     * Type of tasks allowed to be back to back.
-     */
-    private final Set<T> allowList;
 
     /**
-     * Creates a new executor with the given delegate executor service
-     * and the allowed back to back task types.
+     * Creates a new executor with the given delegate executor service.
      *
      * @param delegate executor service
-     * @param allowed tasks allowed to be back to back
      */
-    DeviceTaskExecutor(ExecutorService delegate, Set<T> allowed) {
+    DeviceTaskExecutor(ExecutorService delegate) {
         checkNotNull(delegate);
         this.delegate = delegate;
-        this.allowList = allowed;
     }
 
     /**
@@ -115,7 +108,7 @@ class DeviceTaskExecutor<T extends Enum> {
         final DeviceTask task = new DeviceTask(deviceId, type, runnable);
         deviceLocks.get(deviceId).lock();
         try {
-            if (taskQueues.get(deviceId).isBackToBackDuplicate(type) && !allowList.contains(type)) {
+            if (taskQueues.get(deviceId).isBackToBackDuplicate(type)) {
                 if (log.isDebugEnabled()) {
                     log.debug("Dropping back-to-back duplicate task {} for {}",
                               type, deviceId);

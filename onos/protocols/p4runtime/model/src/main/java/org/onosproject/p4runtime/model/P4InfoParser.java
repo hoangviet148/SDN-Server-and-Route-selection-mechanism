@@ -20,8 +20,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
-import com.google.common.hash.Hashing;
-import com.google.common.hash.HashingInputStream;
 import com.google.protobuf.ExtensionRegistry;
 import com.google.protobuf.TextFormat;
 import org.onosproject.net.pi.model.PiActionId;
@@ -64,7 +62,6 @@ import p4.config.v1.P4InfoOuterClass.Meter;
 import p4.config.v1.P4InfoOuterClass.MeterSpec;
 import p4.config.v1.P4InfoOuterClass.P4Info;
 import p4.config.v1.P4InfoOuterClass.Table;
-import p4.config.v1.P4Types;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -75,10 +72,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
-import static org.onosproject.p4runtime.model.P4InfoAnnotationUtils.MAX_GROUP_SIZE_ANNOTATION;
-import static org.onosproject.p4runtime.model.P4InfoAnnotationUtils.ONE_SHOT_ONLY_ANNOTATION;
-import static org.onosproject.p4runtime.model.P4InfoAnnotationUtils.getAnnotationValue;
-import static org.onosproject.p4runtime.model.P4InfoAnnotationUtils.isAnnotationPresent;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -90,7 +83,6 @@ public final class P4InfoParser {
 
     private static final String PACKET_IN = "packet_in";
     private static final String PACKET_OUT = "packet_out";
-
 
     private static final Map<CounterSpec.Unit, PiCounterModel.Unit> COUNTER_UNIT_MAP =
             new ImmutableMap.Builder<CounterSpec.Unit, PiCounterModel.Unit>()
@@ -119,7 +111,6 @@ public final class P4InfoParser {
                     .put(MatchField.MatchType.LPM, PiMatchType.LPM)
                     .put(MatchField.MatchType.TERNARY, PiMatchType.TERNARY)
                     .put(MatchField.MatchType.RANGE, PiMatchType.RANGE)
-                    .put(MatchField.MatchType.OPTIONAL, PiMatchType.OPTIONAL)
                     // Don't map UNSPECIFIED as we don't support it at the moment.
                     .build();
     public static final int NO_SIZE = -1;
@@ -144,23 +135,8 @@ public final class P4InfoParser {
             throw new P4InfoParserException("Unable to parse protobuf " + p4InfoUrl.toString(), e);
         }
 
-        // Generate fingerprint of the pipeline by hashing p4info file
-        final int fingerprint;
-        try {
-            HashingInputStream hin = new HashingInputStream(Hashing.crc32(), p4InfoUrl.openStream());
-            //noinspection StatementWithEmptyBody
-            while (hin.read() != -1) {
-                // Do nothing. Reading all input stream to update hash.
-            }
-            fingerprint = hin.hash().asInt();
-        } catch (IOException e) {
-            throw new P4InfoParserException("Unable to generate fingerprint " + p4InfoUrl.toString(), e);
-        }
-
         // Start by parsing and mapping instances to to their integer P4Info IDs.
         // Convenient to build the table model at the end.
-
-        final String architecture = parseArchitecture(p4info);
 
         // Counters.
         final Map<Integer, PiCounterModel> counterMap = Maps.newHashMap();
@@ -198,9 +174,7 @@ public final class P4InfoParser {
                 tableFieldMapBuilder.put(
                         fieldId,
                         new P4MatchFieldModel(fieldId,
-                                              isFieldString(p4info, fieldMsg.getTypeName().getName()) ?
-                                                      P4MatchFieldModel.BIT_WIDTH_UNDEFINED :
-                                                      fieldMsg.getBitwidth(),
+                                              fieldMsg.getBitwidth(),
                                               mapMatchFieldType(fieldMsg.getMatchType())));
 
             }
@@ -231,8 +205,6 @@ public final class P4InfoParser {
                     // Filter out missed mapping.
                     .filter(Objects::nonNull)
                     .forEach(counterModel -> tableCounterMapBuilder.put(counterModel.id(), counterModel));
-            // Check if table supports one-shot only
-            boolean oneShotOnly = isAnnotationPresent(ONE_SHOT_ONLY_ANNOTATION, tableMsg.getPreamble());
             tableImmMapBuilder.put(
                     tableId,
                     new P4TableModel(
@@ -247,7 +219,8 @@ public final class P4InfoParser {
                             tableFieldMapBuilder.build(),
                             tableActionMapBuilder.build(),
                             actionMap.get(tableMsg.getConstDefaultActionId()),
-                            tableMsg.getIsConstTable(), oneShotOnly));
+                            tableMsg.getIsConstTable()));
+
         }
 
         // Get a map with proper PI IDs for some of those maps we created at the beginning.
@@ -270,17 +243,9 @@ public final class P4InfoParser {
                 meterImmMap,
                 registerImmMap,
                 actProfileImmMap,
-                ImmutableMap.copyOf(pktOpMap),
-                architecture,
-                fingerprint);
+                ImmutableMap.copyOf(pktOpMap));
     }
 
-    private static String parseArchitecture(P4Info p4info) {
-        if (p4info.hasPkgInfo()) {
-            return p4info.getPkgInfo().getArch();
-        }
-        return null;
-    }
 
     private static Map<Integer, PiCounterModel> parseCounters(P4Info p4info)
             throws P4InfoParserException {
@@ -370,8 +335,8 @@ public final class P4InfoParser {
             // correctly interpret P4Runtime-defined max_group_size annotation:
             // https://s3-us-west-2.amazonaws.com/p4runtime/docs/master/
             // P4Runtime-Spec.html#sec-p4info-action-profile
-            final String maxSizeAnnString = getAnnotationValue(
-                    MAX_GROUP_SIZE_ANNOTATION, actProfileMsg.getPreamble());
+            final String maxSizeAnnString = findAnnotation(
+                    "max_group_size", actProfileMsg.getPreamble());
             final int maxSizeAnn = maxSizeAnnString != null
                     ? Integer.valueOf(maxSizeAnnString) : 0;
             final int maxGroupSize;
@@ -404,11 +369,8 @@ public final class P4InfoParser {
             actionMsg.getParamsList().forEach(paramMsg -> {
                 final PiActionParamId paramId = PiActionParamId.of(paramMsg.getName());
                 paramMapBuilder.put(paramId,
-                                    new P4ActionParamModel(
-                                            PiActionParamId.of(paramMsg.getName()),
-                                            isFieldString(p4info, paramMsg.getTypeName().getName()) ?
-                                                    P4ActionParamModel.BIT_WIDTH_UNDEFINED :
-                                                    paramMsg.getBitwidth()));
+                                    new P4ActionParamModel(PiActionParamId.of(paramMsg.getName()),
+                                                           paramMsg.getBitwidth()));
             });
             actionMap.put(
                     actionMsg.getPreamble().getId(),
@@ -428,9 +390,7 @@ public final class P4InfoParser {
                     ImmutableList.builder();
             ctrlPktMetaMsg.getMetadataList().forEach(metadataMsg -> metadataListBuilder.add(
                     new P4PacketMetadataModel(PiPacketMetadataId.of(metadataMsg.getName()),
-                                              isFieldString(p4info, metadataMsg.getTypeName().getName()) ?
-                                                      P4PacketMetadataModel.BIT_WIDTH_UNDEFINED :
-                                                      metadataMsg.getBitwidth())));
+                                               metadataMsg.getBitwidth())));
             packetOpMap.put(
                     mapPacketOpType(ctrlPktMetaMsg.getPreamble().getName()),
                     new P4PacketOperationModel(mapPacketOpType(ctrlPktMetaMsg.getPreamble().getName()),
@@ -496,10 +456,12 @@ public final class P4InfoParser {
         return MATCH_TYPE_MAP.get(type);
     }
 
-    private static boolean isFieldString(P4Info p4info, String fieldTypeName) {
-        P4Types.P4TypeInfo p4TypeInfo = p4info.getTypeInfo();
-        return p4TypeInfo.containsNewTypes(fieldTypeName) &&
-                p4TypeInfo.getNewTypesOrThrow(fieldTypeName).hasTranslatedType() &&
-                p4TypeInfo.getNewTypesOrThrow(fieldTypeName).getTranslatedType().hasSdnString();
+    private static String findAnnotation(String name, P4InfoOuterClass.Preamble preamble) {
+        return preamble.getAnnotationsList().stream()
+                .filter(a -> a.startsWith("@" + name))
+                // e.g. @my_annotaion(value)
+                .map(a -> a.substring(name.length() + 2, a.length() - 1))
+                .findFirst()
+                .orElse(null);
     }
 }

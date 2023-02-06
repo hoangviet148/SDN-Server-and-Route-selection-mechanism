@@ -23,6 +23,7 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceEvent;
 import org.onosproject.net.device.DeviceListener;
 import org.onosproject.net.device.DeviceService;
+import org.onosproject.net.meter.Meter;
 import org.onosproject.net.meter.MeterOperation;
 import org.onosproject.net.meter.MeterOperations;
 import org.onosproject.net.meter.MeterProgrammable;
@@ -34,11 +35,13 @@ import org.onosproject.net.provider.ProviderId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
+import java.util.Collection;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static org.onlab.util.Tools.groupedThreads;
@@ -49,14 +52,18 @@ import static org.onosproject.net.device.DeviceEvent.Type.DEVICE_AVAILABILITY_CH
  * Driver-based Meter provider.
  */
 public class MeterDriverProvider extends AbstractProvider implements MeterProvider {
+
+    private final Logger log = LoggerFactory.getLogger(getClass());
+
     // To be extracted for reuse as we deal with other.
     private static final String SCHEME = "default";
     private static final String PROVIDER_NAME = "org.onosproject.provider.meter";
 
-    private static final Set<DeviceEvent.Type> POSITIVE_DEVICE_EVENT = Sets.immutableEnumSet(
-            DEVICE_ADDED, DEVICE_AVAILABILITY_CHANGED);
+    // potentially positive device event
+    private static final Set<DeviceEvent.Type> POSITIVE_DEVICE_EVENT =
+            Sets.immutableEnumSet(DEVICE_ADDED,
+                    DEVICE_AVAILABILITY_CHANGED);
 
-    private final Logger log = LoggerFactory.getLogger(getClass());
     protected DeviceService deviceService;
     protected MastershipService mastershipService;
     MeterProviderService meterProviderService;
@@ -108,15 +115,12 @@ public class MeterDriverProvider extends AbstractProvider implements MeterProvid
     }
 
     private void pollMeters() {
-        try {
-            deviceService.getAvailableDevices().forEach(device -> {
-                if (mastershipService.isLocalMaster(device.id()) && device.is(MeterProgrammable.class)) {
-                    pollDeviceMeters(device);
-                }
-            });
-        } catch (Exception e) {
-            log.warn("Exception thrown while polling meters", e);
-        }
+        deviceService.getAvailableDevices().forEach(device -> {
+            if (mastershipService.isLocalMaster(device.id()) &&
+                    device.is(MeterProgrammable.class)) {
+                pollDeviceMeters(device.id());
+            }
+        });
     }
 
     @Override
@@ -132,32 +136,23 @@ public class MeterDriverProvider extends AbstractProvider implements MeterProvid
         }
     }
 
-    private void pollDeviceMeters(Device device) {
+    private void pollDeviceMeters(DeviceId deviceId) {
+        Collection<Meter> meters = null;
         try {
-            meterProviderService.pushMeterMetrics(device.id(), device.as(MeterProgrammable.class).getMeters()
-                    .completeOnTimeout(Collections.emptySet(), pollFrequency, TimeUnit.SECONDS).get());
-        } catch (Exception e) {
-            log.warn("Unable to get the Meters from {}, error: {}", device, e.getMessage());
+            meters = getMeterProgrammable(deviceId).getMeters().get(pollFrequency, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            log.warn("Unable to get the Meters from {}, error: {}", deviceId, e.getMessage());
             log.debug("Exception: ", e);
         }
-    }
-
-    private void getMeterFeatures(Device device) {
-        try {
-            meterProviderService.pushMeterFeatures(device.id(), device.as(MeterProgrammable.class).getMeterFeatures()
-                    .completeOnTimeout(Collections.emptySet(), pollFrequency, TimeUnit.SECONDS).get());
-        } catch (Exception e) {
-            log.warn("Unable to get the Meter Features from {}, error: {}", device.id(), e.getMessage());
-            log.debug("Exception: ", e);
-        }
+        meterProviderService.pushMeterMetrics(deviceId, meters);
     }
 
     private MeterProgrammable getMeterProgrammable(DeviceId deviceId) {
         Device device = deviceService.getDevice(deviceId);
-        if (device != null && device.is(MeterProgrammable.class)) {
+        if (device.is(MeterProgrammable.class)) {
             return device.as(MeterProgrammable.class);
         } else {
-            log.debug("Device {} is not meter programmable or does not exist", deviceId);
+            log.debug("Device {} is not meter programmable", deviceId);
             return null;
         }
     }
@@ -171,29 +166,18 @@ public class MeterDriverProvider extends AbstractProvider implements MeterProvid
 
         @Override
         public boolean isRelevant(DeviceEvent event) {
-            return event.subject().is(MeterProgrammable.class);
+            Device device = event.subject();
+            return POSITIVE_DEVICE_EVENT.contains(event.type()) &&
+                    device.is(MeterProgrammable.class);
         }
 
         private void handleEvent(DeviceEvent event) {
             Device device = event.subject();
-
-            switch (event.type()) {
-                case DEVICE_ADDED:
-                    getMeterFeatures(device);
-                    break;
-                case DEVICE_REMOVED:
-                case DEVICE_SUSPENDED:
-                    meterProviderService.deleteMeterFeatures(device.id());
-                    break;
-                default:
-                    break;
-            }
-
-            boolean isRelevant = POSITIVE_DEVICE_EVENT.contains(event.type()) &&
-                    mastershipService.isLocalMaster(device.id()) && deviceService.isAvailable(device.id());
+            boolean isRelevant = mastershipService.isLocalMaster(device.id()) &&
+                    deviceService.isAvailable(device.id());
 
             if (isRelevant) {
-                pollDeviceMeters(device);
+                pollDeviceMeters(device.id());
             }
         }
     }

@@ -15,10 +15,8 @@
  */
 package org.onosproject.net.intent.impl;
 
-import com.google.common.collect.ImmutableSet;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
-import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.core.IdGenerator;
 import org.onosproject.event.AbstractListenerManager;
@@ -89,7 +87,8 @@ import static org.onosproject.net.intent.IntentState.WITHDRAW_REQ;
 import static org.onosproject.net.intent.constraint.PartialFailureConstraint.intentAllowsPartialFailure;
 import static org.onosproject.net.intent.impl.phase.IntentProcessPhase.newInitialPhase;
 import static org.onosproject.security.AppGuard.checkPermission;
-import static org.onosproject.security.AppPermission.Type.*;
+import static org.onosproject.security.AppPermission.Type.INTENT_READ;
+import static org.onosproject.security.AppPermission.Type.INTENT_WRITE;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -289,20 +288,6 @@ public class IntentManager
     public Iterable<Intent> getIntents() {
         checkPermission(INTENT_READ);
         return store.getIntents();
-    }
-
-    @Override
-    public Iterable<Intent> getIntentsByAppId(ApplicationId id) {
-        checkPermission(INTENT_READ);
-
-        ImmutableSet.Builder<Intent> builder = ImmutableSet.builder();
-        for (Intent intent : store.getIntents()) {
-            if (intent.appId().equals(id)) {
-                builder.add(intent);
-            }
-        }
-
-        return builder.build();
     }
 
     @Override

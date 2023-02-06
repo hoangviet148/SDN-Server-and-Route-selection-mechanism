@@ -169,7 +169,7 @@ final class WriteRequestImpl implements P4RuntimeWriteClient.WriteRequest {
                   client.deviceId(), writeRequest.getUpdatesCount());
         if (writeRequest.getUpdatesCount() == 0) {
             // No need to ask the server.
-            return completedFuture(responseBuilder.buildAsIs());
+            return completedFuture(WriteResponseImpl.EMPTY);
         }
         final CompletableFuture<P4RuntimeWriteClient.WriteResponse> future =
                 new CompletableFuture<>();
@@ -238,12 +238,7 @@ final class WriteRequestImpl implements P4RuntimeWriteClient.WriteRequest {
                     .build();
             requestMsg.addUpdates(updateMsg);
             responseBuilder.addPendingResponse(handle, piEntity, updateType);
-            if (log.isTraceEnabled()) {
-                log.trace("Adding {} update to write request for {}: {}", updateType, handle.deviceId(),
-                        piEntity == null ? handle : piEntity);
-            }
         } catch (CodecException e) {
-            log.error("Failed to add {} to write request for {}: {}", updateType, handle.deviceId(), e.getMessage());
             responseBuilder.addFailedResponse(
                     handle, piEntity, updateType, e.getMessage(),
                     P4RuntimeWriteClient.EntityUpdateStatus.CODEC_ERROR);

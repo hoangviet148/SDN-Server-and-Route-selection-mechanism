@@ -17,7 +17,8 @@ package org.onosproject.artemis.impl.monitors;
 
 import io.socket.client.IO;
 import io.socket.client.Socket;
-import com.eclipsesource.json.JsonObject;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.onlab.packet.IpPrefix;
 import org.onosproject.artemis.ArtemisPacketProcessor;
 import org.onosproject.artemis.Monitors;
@@ -47,18 +48,22 @@ public class RipeMonitors implements Monitors {
      * socket.io onConnect event handler.
      */
     private void onConnect() {
-        socket.emit("ping");
+        try {
+            socket.emit("ping");
 
-        JsonObject parameters = new JsonObject();
-        parameters.set("origin", "");
-        parameters.set("type", "");
-        parameters.set("moreSpecific", true);
-        parameters.set("lessSpecific", false);
-        parameters.set("peer", "");
-        parameters.set("host", this.host);
-        parameters.set("prefix", this.prefix.toString());
+            JSONObject parameters = new JSONObject();
+            parameters.put("origin", (Object) null);
+            parameters.put("type", (Object) null);
+            parameters.put("moreSpecific", true);
+            parameters.put("lessSpecific", false);
+            parameters.put("peer", (Object) null);
+            parameters.put("host", this.host);
+            parameters.put("prefix", this.prefix);
 
-        socket.emit("ris_subscribe", parameters);
+            socket.emit("ris_subscribe", parameters);
+        } catch (JSONException e) {
+            log.warn("onConnect()", e);
+        }
     }
 
     @Override
@@ -78,31 +83,34 @@ public class RipeMonitors implements Monitors {
      * @param args RIS message
      */
     private void onRisMessage(Object[] args) {
-        JsonObject message = (JsonObject) args[0];
-        if (message.get("type").asString().equals("A")) {
-            // Example of BGP Update message:
-            // {
-            //  "timestamp":1488044022.97,
-            //  "prefix":"101.1.46.0/24",
-            //  "host":"rrc21",
-            //  "next_hop":"37.49.236.246",
-            //  "peer":"37.49.236.246",
-            //  "path":[2613,25091,9318,9524],
-            //  "type":"A"
-            // }
+        try {
+            JSONObject message = (JSONObject) args[0];
+            if (message.getString("type").equals("A")) {
+                // Example of BGP Update message:
+                // {
+                //  "timestamp":1488044022.97,
+                //  "prefix":"101.1.46.0/24",
+                //  "host":"rrc21",
+                //  "next_hop":"37.49.236.246",
+                //  "peer":"37.49.236.246",
+                //  "path":[2613,25091,9318,9524],
+                //  "type":"A"
+                // }
 
-            // We want to keep only prefix and path in memory.
-            message.remove("community");
-            message.remove("timestamp");
-            message.remove("next_hop");
-            message.remove("peer");
-            message.remove("type");
-            message.remove("host");
+                // We want to keep only prefix and path in memory.
+                message.remove("community");
+                message.remove("timestamp");
+                message.remove("next_hop");
+                message.remove("peer");
+                message.remove("type");
+                message.remove("host");
 
-            // Append synchronized message to message list in memory.
-            packetProcessor.processMonitorPacket(message);
+                // Append synchronized message to message list in memory.
+                packetProcessor.processMonitorPacket(message);
+            }
+        } catch (JSONException e) {
+            log.error("onRisMessage()", e);
         }
-
         socket.emit("ping");
     }
 

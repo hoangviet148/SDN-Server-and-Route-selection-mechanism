@@ -48,12 +48,13 @@ public class Traffic2Monitor extends TrafficMonitorBase {
     /**
      * Constructs a traffic monitor.
      *
+     * @param trafficPeriod  traffic task period in ms
      * @param servicesBundle bundle of services
      * @param msgHandler     our message handler
      */
-    public Traffic2Monitor(ServicesBundle servicesBundle,
+    public Traffic2Monitor(long trafficPeriod, ServicesBundle servicesBundle,
                            Topo2TrafficMessageHandler msgHandler) {
-        super(servicesBundle, msgHandler);
+        super(trafficPeriod, servicesBundle, msgHandler);
         this.msgHandler = msgHandler;
     }
 
@@ -61,10 +62,6 @@ public class Traffic2Monitor extends TrafficMonitorBase {
     protected void sendAllFlowTraffic() {
         log.debug("TOPO-2-TRAFFIC: sendAllFlowTraffic");
         msgHandler.sendHighlights(trafficSummary(TrafficLink.StatsType.FLOW_STATS));
-    }
-
-    @Override
-    protected void sendCustomTraffic() {
     }
 
     @Override

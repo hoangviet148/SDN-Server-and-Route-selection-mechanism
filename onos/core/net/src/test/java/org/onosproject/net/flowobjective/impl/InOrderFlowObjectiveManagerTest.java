@@ -63,7 +63,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.onlab.junit.TestTools.assertAfter;
 import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.net.OsgiPropertyConstants.IFOM_OBJ_TIMEOUT_MS_DEFAULT;
 
 import java.util.Collection;
 import java.util.List;
@@ -187,12 +186,12 @@ public class InOrderFlowObjectiveManagerTest {
 
     @Before
     public void setUp() {
-        internalSetup(IFOM_OBJ_TIMEOUT_MS_DEFAULT);
+        internalSetup(InOrderFlowObjectiveManager.DEFAULT_OBJ_TIMEOUT);
     }
 
     private void internalSetup(int objTimeoutMs) {
         mgr = new InOrderFlowObjectiveManager();
-        mgr.objectiveTimeoutMs = objTimeoutMs;
+        mgr.objTimeoutMs = objTimeoutMs;
         mgr.pipeliners.put(DEV1, pipeliner);
         mgr.installerExecutor = newFixedThreadPool(4, groupedThreads("foo", "bar"));
         mgr.cfgService = createMock(ComponentConfigService.class);
@@ -264,7 +263,7 @@ public class InOrderFlowObjectiveManagerTest {
         replay(mgr.flowObjectiveStore);
 
         // Force this objective to time out
-        offset = mgr.objectiveTimeoutMs * 3;
+        offset = mgr.objTimeoutMs * 3;
 
         expectFwdObjsTimeout.forEach(fwdObj -> mgr.forward(DEV1, fwdObj));
 

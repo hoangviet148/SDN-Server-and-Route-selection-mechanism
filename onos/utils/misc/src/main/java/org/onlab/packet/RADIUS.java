@@ -105,15 +105,6 @@ public class RADIUS extends BasePacket {
     }
 
     /**
-     * Get the identifier in a readable format.
-     *
-     * @return identifier
-     */
-    public int getReadableIdentifier() {
-        return this.identifier & 0xff;
-    }
-
-    /**
      * Sets the identifier.
      *
      * @param identifier identifier

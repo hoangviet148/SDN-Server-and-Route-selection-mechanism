@@ -35,4 +35,9 @@ public enum MeterState {
      */
     PENDING_REMOVE,
 
+    /**
+     * The meter has been removed.
+     */
+    REMOVED,
+
 }

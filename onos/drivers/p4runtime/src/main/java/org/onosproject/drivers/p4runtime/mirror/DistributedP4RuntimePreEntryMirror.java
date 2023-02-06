@@ -35,9 +35,4 @@ public final class DistributedP4RuntimePreEntryMirror
         // invalidate pipeline status.
         super(PiEntityType.PRE_ENTRY, true);
     }
-
-    @Override
-    protected String mapSimpleName() {
-        return PiEntityType.PRE_ENTRY.name().toLowerCase();
-    }
 }

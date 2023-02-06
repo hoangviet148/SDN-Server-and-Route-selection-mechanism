@@ -17,7 +17,6 @@
 package org.onosproject.pipelines.fabric.impl.behaviour;
 
 import org.onosproject.net.pi.model.PiPipeconf;
-import org.onosproject.pipelines.fabric.FabricConstants;
 import org.slf4j.Logger;
 
 import java.io.BufferedReader;
@@ -28,7 +27,6 @@ import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onosproject.net.pi.model.PiPipeconf.ExtensionType.CPU_PORT_TXT;
-import static org.onosproject.pipelines.fabric.FabricConstants.FABRIC_INGRESS_SPGW_DOWNLINK_PDRS;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -49,7 +47,7 @@ public class FabricCapabilities {
                 .table(FabricConstants.FABRIC_INGRESS_NEXT_HASHED).isPresent();
     }
 
-    public Optional<Long> cpuPort() {
+    public Optional<Integer> cpuPort() {
         // This is probably brittle, but needed to dynamically get the CPU port
         // for different platforms.
         if (!pipeconf.extension(CPU_PORT_TXT).isPresent()) {
@@ -67,7 +65,7 @@ public class FabricCapabilities {
                 return Optional.empty();
             }
             try {
-                return Optional.of(Long.parseLong(str));
+                return Optional.of(Integer.parseInt(str));
             } catch (NumberFormatException e) {
                 log.error("Invalid CPU port for {}: {}", pipeconf.id(), str);
                 return Optional.empty();
@@ -81,23 +79,12 @@ public class FabricCapabilities {
 
     public boolean supportDoubleVlanTerm() {
         if (pipeconf.pipelineModel()
-                .table(FabricConstants.FABRIC_INGRESS_PRE_NEXT_NEXT_VLAN).isPresent()) {
-            return pipeconf.pipelineModel().table(FabricConstants.FABRIC_INGRESS_PRE_NEXT_NEXT_VLAN)
-                    .get().action(FabricConstants.FABRIC_INGRESS_PRE_NEXT_SET_DOUBLE_VLAN)
+                .table(FabricConstants.FABRIC_INGRESS_NEXT_NEXT_VLAN).isPresent()) {
+            return pipeconf.pipelineModel().table(FabricConstants.FABRIC_INGRESS_NEXT_NEXT_VLAN)
+                    .get().action(FabricConstants.FABRIC_INGRESS_NEXT_SET_DOUBLE_VLAN)
                     .isPresent();
         }
         return false;
-    }
-
-    /**
-     * Returns true if the pipeconf supports UPF capabilities, false otherwise.
-     *
-     * @return boolean
-     */
-    public boolean supportUpf() {
-        return pipeconf.pipelineModel()
-                .table(FABRIC_INGRESS_SPGW_DOWNLINK_PDRS)
-                .isPresent();
     }
 
     /**

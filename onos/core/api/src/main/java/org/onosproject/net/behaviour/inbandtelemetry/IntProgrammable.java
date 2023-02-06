@@ -41,11 +41,7 @@ public interface IntProgrammable extends HandlerBehaviour {
         /**
          * Transit functionality.
          */
-        TRANSIT,
-        /**
-         * Postcard functionality.
-         */
-        POSTCARD
+        TRANSIT
     }
 
     /**

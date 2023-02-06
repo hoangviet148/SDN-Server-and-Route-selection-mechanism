@@ -16,7 +16,6 @@
 
 package org.onosproject.incubator.net.virtual.impl;
 
-import com.google.common.collect.ImmutableSet;
 import org.onlab.util.Tools;
 import org.onosproject.incubator.net.virtual.NetworkId;
 import org.onosproject.incubator.net.virtual.VirtualNetworkIntent;
@@ -34,7 +33,6 @@ import org.onosproject.incubator.net.virtual.impl.intent.VirtualIntentInstallerR
 import org.onosproject.incubator.net.virtual.impl.intent.phase.VirtualIntentProcessPhase;
 import org.onosproject.incubator.net.virtual.impl.intent.VirtualIntentProcessor;
 import org.onosproject.incubator.net.virtual.impl.intent.VirtualIntentSkipped;
-import org.onosproject.core.ApplicationId;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Port;
@@ -222,18 +220,6 @@ public class VirtualNetworkIntentManager
     @Override
     public Iterable<Intent> getIntents() {
         return intentStore.getIntents(networkId);
-    }
-
-    @Override
-    public Iterable<Intent> getIntentsByAppId(ApplicationId id) {
-        ImmutableSet.Builder<Intent> builder = ImmutableSet.builder();
-        for (Intent intent : intentStore.getIntents(networkId)) {
-            if (intent.appId().equals(id)) {
-                builder.add(intent);
-            }
-        }
-
-        return builder.build();
     }
 
     @Override

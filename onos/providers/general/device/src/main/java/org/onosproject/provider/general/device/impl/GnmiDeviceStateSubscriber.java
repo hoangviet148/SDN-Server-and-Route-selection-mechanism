@@ -52,12 +52,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.locks.Lock;
 import java.util.stream.Collectors;
-
-import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
-import static org.onlab.util.Tools.groupedThreads;
 
 /**
  * Entity that manages gNMI subscription for devices using OpenConfig models and
@@ -66,7 +62,7 @@ import static org.onlab.util.Tools.groupedThreads;
 @Beta
 class GnmiDeviceStateSubscriber {
 
-    private static final String LAST_CHANGE = "last-change";
+    private static final String LAST_CHANGE = "last-changed";
 
     private static Logger log = LoggerFactory.getLogger(GnmiDeviceStateSubscriber.class);
 
@@ -82,8 +78,6 @@ class GnmiDeviceStateSubscriber {
 
     private final Striped<Lock> deviceLocks = Striped.lock(30);
 
-    private ExecutorService eventExecutor;
-
     GnmiDeviceStateSubscriber(GnmiController gnmiController, DeviceService deviceService,
                               MastershipService mastershipService,
                               DeviceProviderService providerService) {
@@ -94,8 +88,6 @@ class GnmiDeviceStateSubscriber {
     }
 
     public void activate() {
-        eventExecutor = newSingleThreadScheduledExecutor(groupedThreads(
-                "onos/gnmi", "events-%d", log));
         deviceService.addListener(deviceEventListener);
         mastershipService.addListener(mastershipListener);
         gnmiController.addListener(gnmiEventListener);
@@ -108,8 +100,6 @@ class GnmiDeviceStateSubscriber {
         deviceService.removeListener(deviceEventListener);
         mastershipService.removeListener(mastershipListener);
         gnmiController.removeListener(gnmiEventListener);
-        eventExecutor.shutdownNow();
-        eventExecutor = null;
     }
 
     private void checkSubscription(DeviceId deviceId) {
@@ -136,12 +126,13 @@ class GnmiDeviceStateSubscriber {
                 && !deviceService.getPorts(deviceId).isEmpty();
     }
 
-    private Path interfaceStatePath(String interfaceName) {
+    private Path interfaceOperStatusPath(String interfaceName) {
         return Path.newBuilder()
                 .addElem(PathElem.newBuilder().setName("interfaces").build())
                 .addElem(PathElem.newBuilder()
                                  .setName("interface").putKey("name", interfaceName).build())
                 .addElem(PathElem.newBuilder().setName("state").build())
+                .addElem(PathElem.newBuilder().setName("oper-status").build())
                 .build();
     }
 
@@ -172,7 +163,7 @@ class GnmiDeviceStateSubscriber {
                 .setUpdatesOnly(true)
                 .addAllSubscription(ports.stream().map(
                         port -> Subscription.newBuilder()
-                                .setPath(interfaceStatePath(port.name()))
+                                .setPath(interfaceOperStatusPath(port.name()))
                                 .setMode(SubscriptionMode.ON_CHANGE)
                                 .build()).collect(Collectors.toList()))
                 .build();
@@ -192,32 +183,19 @@ class GnmiDeviceStateSubscriber {
             return;
         }
 
-        long lastChange = 0;
-        Update statusUpdate = null;
-        Path path;
-        PathElem lastElem;
-        // The assumption is that the notification contains all the updates:
-        // last-change, oper-status, counters, and so on. Otherwise, we need
-        // to put in place the aggregation logic in ONOS
-        for (Update update : notification.getUpdateList()) {
-            path = update.getPath();
-            lastElem = path.getElem(path.getElemCount() - 1);
+        List<Update> updateList = notification.getUpdateList();
+        updateList.forEach(update -> {
+            Path path = update.getPath();
+            PathElem lastElem = path.getElem(path.getElemCount() - 1);
 
             // Use last element to identify which state updated
             if ("oper-status".equals(lastElem.getName())) {
-                statusUpdate = update;
-            } else if ("last-change".equals(lastElem.getName())) {
-                lastChange = update.getVal().getUintVal();
-            } else if (log.isDebugEnabled()) {
+                handleOperStatusUpdate(eventSubject.deviceId(), update,
+                                       notification.getTimestamp());
+            } else {
                 log.debug("Unrecognized update {}", GnmiUtils.pathToString(path));
             }
-        }
-
-        // Last-change could be not supported by the device
-        // Cannot proceed without the status update.
-        if (statusUpdate != null) {
-            handleOperStatusUpdate(eventSubject.deviceId(), statusUpdate, lastChange);
-        }
+        });
     }
 
     private void handleOperStatusUpdate(DeviceId deviceId, Update update, long timestamp) {
@@ -258,21 +236,19 @@ class GnmiDeviceStateSubscriber {
 
         @Override
         public void event(GnmiEvent event) {
-            eventExecutor.execute(() -> {
-                if (!deviceSubscribed.containsKey(event.subject().deviceId())) {
-                    log.warn("Received gNMI event from {}, but we did'nt expect to " +
-                                    "be subscribed to it! Discarding event...",
-                            event.subject().deviceId());
-                    return;
-                }
+            if (!deviceSubscribed.containsKey(event.subject().deviceId())) {
+                log.warn("Received gNMI event from {}, but we did'nt expect to " +
+                                 "be subscribed to it! Discarding event...",
+                         event.subject().deviceId());
+                return;
+            }
 
-                log.debug("Received gNMI event {}", event.toString());
-                if (event.type() == GnmiEvent.Type.UPDATE) {
-                    handleGnmiUpdate((GnmiUpdate) event.subject());
-                } else {
-                    log.debug("Unsupported gNMI event type: {}", event.type());
-                }
-            });
+            log.debug("Received gNMI event {}", event.toString());
+            if (event.type() == GnmiEvent.Type.UPDATE) {
+                handleGnmiUpdate((GnmiUpdate) event.subject());
+            } else {
+                log.debug("Unsupported gNMI event type: {}", event.type());
+            }
         }
     }
 
@@ -280,7 +256,7 @@ class GnmiDeviceStateSubscriber {
 
         @Override
         public void event(MastershipEvent event) {
-            eventExecutor.execute(() -> checkSubscription(event.subject()));
+            checkSubscription(event.subject());
         }
     }
 
@@ -288,20 +264,18 @@ class GnmiDeviceStateSubscriber {
 
         @Override
         public void event(DeviceEvent event) {
-            eventExecutor.execute(() -> {
-                switch (event.type()) {
-                    case DEVICE_ADDED:
-                    case DEVICE_AVAILABILITY_CHANGED:
-                    case DEVICE_UPDATED:
-                    case DEVICE_REMOVED:
-                    case PORT_ADDED:
-                    case PORT_REMOVED:
-                        checkSubscription(event.subject().id());
-                        break;
-                    default:
-                        break;
-                }
-            });
+            switch (event.type()) {
+                case DEVICE_ADDED:
+                case DEVICE_AVAILABILITY_CHANGED:
+                case DEVICE_UPDATED:
+                case DEVICE_REMOVED:
+                case PORT_ADDED:
+                case PORT_REMOVED:
+                    checkSubscription(event.subject().id());
+                    break;
+                default:
+                    break;
+            }
         }
     }
 }

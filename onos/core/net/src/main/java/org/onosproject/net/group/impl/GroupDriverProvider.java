@@ -117,25 +117,17 @@ public class GroupDriverProvider extends AbstractProvider implements GroupProvid
     }
 
     private void pollGroups() {
-        try {
-            deviceService.getAvailableDevices().forEach(device -> {
-                if (mastershipService.isLocalMaster(device.id()) &&
-                        device.is(GroupProgrammable.class)) {
-                    pollDeviceGroups(device.id());
-                }
-            });
-        } catch (Exception e) {
-            log.warn("Exception thrown while polling groups", e);
-        }
+        deviceService.getAvailableDevices().forEach(device -> {
+            if (mastershipService.isLocalMaster(device.id()) &&
+                    device.is(GroupProgrammable.class)) {
+                pollDeviceGroups(device.id());
+            }
+        });
     }
 
     private void pollDeviceGroups(DeviceId deviceId) {
-        try {
-            Collection<Group> groups = getGroupProgrammable(deviceId).getGroups();
-            groupProviderService.pushGroupMetrics(deviceId, groups);
-        } catch (Exception e) {
-            log.warn("Exception thrown while polling groups from {}", deviceId, e);
-        }
+        Collection<Group> groups = getGroupProgrammable(deviceId).getGroups();
+        groupProviderService.pushGroupMetrics(deviceId, groups);
     }
 
     private GroupProgrammable getGroupProgrammable(DeviceId deviceId) {

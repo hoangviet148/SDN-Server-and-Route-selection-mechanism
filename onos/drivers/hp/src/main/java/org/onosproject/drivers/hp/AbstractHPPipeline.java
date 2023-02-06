@@ -544,13 +544,6 @@ public abstract class AbstractHPPipeline extends AbstractHandlerBehaviour implem
         }
     }
 
-    @Override
-    public void purgeAll(ApplicationId appId) {
-        flowRuleService.purgeFlowRules(deviceId, appId);
-        groupService.purgeGroupEntries(deviceId, appId);
-        meterService.purgeMeters(deviceId, appId);
-    }
-
     /**
      * Gets traffic treatment from a next objective.
      * Merge traffic treatments from next objective if the next objective is

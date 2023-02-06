@@ -16,7 +16,6 @@
 package org.onosproject.openstacknetworking.impl;
 
 import com.google.common.collect.ImmutableSet;
-import org.onlab.packet.IpAddress;
 import org.onosproject.net.DeviceId;
 import org.onosproject.openstacknode.api.OpenstackNode;
 import org.onosproject.openstacknode.api.OpenstackNodeListener;
@@ -55,11 +54,6 @@ public class OpenstackNodeServiceAdapter implements OpenstackNodeService {
 
     @Override
     public OpenstackNode node(DeviceId deviceId) {
-        return null;
-    }
-
-    @Override
-    public OpenstackNode node(IpAddress mgmtIp) {
         return null;
     }
 

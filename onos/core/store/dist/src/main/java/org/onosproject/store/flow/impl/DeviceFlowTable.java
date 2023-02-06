@@ -33,21 +33,19 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import org.onlab.util.KryoNamespace;
 import org.onlab.util.Tools;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.NodeId;
-import org.onosproject.core.ApplicationId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.FlowEntry;
 import org.onosproject.net.flow.FlowId;
 import org.onosproject.net.flow.FlowRule;
-import org.onosproject.net.flow.FlowRuleStoreException;
 import org.onosproject.net.flow.StoredFlowEntry;
+import org.onosproject.net.flow.FlowRuleStoreException;
 import org.onosproject.store.LogicalTimestamp;
 import org.onosproject.store.cluster.messaging.ClusterCommunicationService;
 import org.onosproject.store.cluster.messaging.MessageSubject;
@@ -668,11 +666,10 @@ public class DeviceFlowTable {
      * @param newReplicaInfo  the new replica info
      */
     private void syncFlowsOnMaster(DeviceReplicaInfo prevReplicaInfo, DeviceReplicaInfo newReplicaInfo) {
-        log.info("syncFlowsOnMaster {}", prevReplicaInfo.master());
         syncFlowsOn(prevReplicaInfo.master())
             .whenCompleteAsync((result, error) -> {
                 if (error != null) {
-                    log.warn("Failed to synchronize flows on previous master {}", prevReplicaInfo.master(), error);
+                    log.debug("Failed to synchronize flows on previous master {}", prevReplicaInfo.master(), error);
                     syncFlowsOnBackups(prevReplicaInfo, newReplicaInfo);
                 } else {
                     activateMaster(newReplicaInfo);
@@ -691,11 +688,10 @@ public class DeviceFlowTable {
             .stream()
             .filter(nodeId -> !nodeId.equals(localNodeId))
             .collect(Collectors.toList());
-        log.info("syncFlowsOnBackups {}", backups);
         syncFlowsOn(backups)
             .whenCompleteAsync((result, error) -> {
                 if (error != null) {
-                    log.warn("Failed to synchronize flows on previous backup nodes {}", backups, error);
+                    log.debug("Failed to synchronize flows on previous backup nodes {}", backups, error);
                 }
                 activateMaster(newReplicaInfo);
             }, executor);
@@ -723,7 +719,6 @@ public class DeviceFlowTable {
      * @return a future to be completed once the flows have been synchronizes
      */
     private CompletableFuture<Void> syncFlowsOn(NodeId nodeId) {
-        log.info("syncFlowsOn {}", nodeId);
         return requestDigests(nodeId)
             .thenCompose(digests -> Tools.allOf(digests.stream()
                 .filter(digest -> digest.isNewerThan(getDigest(digest.bucket())))
@@ -740,7 +735,6 @@ public class DeviceFlowTable {
      * @return a future to be completed once the bucket has been synchronizes
      */
     private CompletableFuture<Void> syncBucketOn(NodeId nodeId, int bucketNumber) {
-        log.info("syncBucket {} on {}", bucketNumber, nodeId);
         return requestBucket(nodeId, bucketNumber)
             .thenAcceptAsync(flowBucket -> {
                 flowBuckets.compute(flowBucket.bucketId().bucket(),
@@ -756,7 +750,7 @@ public class DeviceFlowTable {
      * @return a future to be completed with the bucket
      */
     private CompletableFuture<FlowBucket> requestBucket(NodeId nodeId, int bucket) {
-        log.info("Requesting flow bucket {} from {}", bucket, nodeId);
+        log.debug("Requesting flow bucket {} from {}", bucket, nodeId);
         return sendWithTimestamp(bucket, getBucketSubject, nodeId);
     }
 
@@ -777,7 +771,7 @@ public class DeviceFlowTable {
      */
     private void activateMaster(DeviceReplicaInfo replicaInfo) {
         if (replicaInfo.isMaster(localNodeId)) {
-            log.info("Activating term {} for device {}", replicaInfo.term(), deviceId);
+            log.debug("Activating term {} for device {}", replicaInfo.term(), deviceId);
             for (int i = 0; i < NUM_BUCKETS; i++) {
                 activateBucket(i);
             }
@@ -963,51 +957,6 @@ public class DeviceFlowTable {
         flowBuckets.values().forEach(bucket -> bucket.purge());
         lastBackupTimes.clear();
         inFlightUpdates.clear();
-    }
-
-    /**
-     * Purges the flows with the given application id.
-     *
-     * @param appId the application id
-     * @return a future to be completed once flow rules with given application
-     * id have been purged on all buckets
-     */
-    public CompletableFuture<Void> purge(ApplicationId appId) {
-        DeviceReplicaInfo replicaInfo = lifecycleManager.getReplicaInfo();
-        if (!replicaInfo.isMaster(localNodeId)) {
-            return Tools.exceptionalFuture(new IllegalStateException());
-        }
-
-        // If the master's term is not currently active (has not been synchronized
-        // with prior replicas), enqueue the changes to be executed once the master
-        // has been synchronized.
-        final long term = replicaInfo.term();
-        List<CompletableFuture<Void>> completablePurges = Lists.newArrayList();
-        if (activeTerm < term) {
-            log.debug("Enqueueing operations for device {}", deviceId);
-            flowBuckets.values().forEach(
-                    bucket -> {
-                        CompletableFuture<Void> future = new CompletableFuture<>();
-                        completablePurges.add(future);
-                        flowTasks.computeIfAbsent(bucket.bucketId().bucket(),
-                                                  b -> new LinkedList<>())
-                                .add(() -> future.complete(apply((bkt, trm) -> {
-                                    bkt.purge(appId, trm, clock);
-                                    return null;
-                                    }, bucket, term)));
-                    });
-
-        } else {
-            flowBuckets.values().forEach(bucket -> {
-                CompletableFuture<Void> future = new CompletableFuture<>();
-                completablePurges.add(future);
-                future.complete(apply((bkt, trm) -> {
-                    bkt.purge(appId, trm, clock);
-                    return null;
-                    }, bucket, term));
-            });
-        }
-        return CompletableFuture.allOf(completablePurges.toArray(new CompletableFuture[0]));
     }
 
     /**

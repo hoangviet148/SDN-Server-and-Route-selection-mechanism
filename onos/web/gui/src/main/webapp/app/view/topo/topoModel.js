@@ -178,7 +178,7 @@
         return node;
     }
 
-    function createHostLink(hostId, devId, devPort, connectionType) {
+    function createHostLink(hostId, devId, devPort) {
         var linkKey = hostId + '/0-' + devId + '/' + devPort,
             lnk = linkEndPoints(hostId, devId);
 
@@ -194,7 +194,6 @@
             tgtPort: devPort,
 
             type: function () { return 'hostLink'; },
-            connectionType: function () { return connectionType; },
             expected: function () { return true; },
             online: function () {
                 // hostlink target is edge switch

@@ -16,12 +16,10 @@
 package org.onosproject.net.behaviour.inbandtelemetry;
 
 import com.google.common.annotations.Beta;
-import com.google.common.base.Objects;
 import org.onlab.packet.IpAddress;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.TpPort;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
@@ -37,14 +35,14 @@ public final class IntDeviceConfig {
          * Embeds telemetry metadata according to the INT specification.
          *
          * @see <a href="https://github.com/p4lang/p4-applications/blob/master/docs/INT.pdf">
-         * INT sepcification</a>
+         *     INT sepcification</a>
          */
         INT,
         /**
          * Embeds telemetry metadata according to the OAM specification.
          *
          * @see <a href="https://tools.ietf.org/html/draft-ietf-ippm-ioam-data">
-         * Data fields for In-situ OAM</a>
+         *     Data fields for In-situ OAM</a>
          */
         IOAM
     }
@@ -56,11 +54,9 @@ public final class IntDeviceConfig {
     private final MacAddress sinkMac;
     private final TelemetrySpec spec;
     private boolean enabled;
-    private int hopLatencySensitivity;
 
     private IntDeviceConfig(IpAddress collectorIp, TpPort collectorPort, MacAddress collectorNextHopMac,
-                            IpAddress sinkIp, MacAddress sinkMac, TelemetrySpec spec, boolean enabled,
-                            int hopLatencySensitivity) {
+                            IpAddress sinkIp, MacAddress sinkMac, TelemetrySpec spec, boolean enabled) {
         this.collectorIp = collectorIp;
         this.collectorPort = collectorPort;
         this.collectorNextHopMac = collectorNextHopMac;
@@ -68,7 +64,6 @@ public final class IntDeviceConfig {
         this.sinkMac = sinkMac;
         this.spec = spec;
         this.enabled = enabled;
-        this.hopLatencySensitivity = hopLatencySensitivity;
     }
 
     /**
@@ -150,15 +145,6 @@ public final class IntDeviceConfig {
     }
 
     /**
-     * Returns the minimal interval of hop latency change for a flow.
-     *
-     * @return the minimal interval of hop latency change for a flow.
-     */
-    public int minFlowHopLatencyChangeNs() {
-        return hopLatencySensitivity;
-    }
-
-    /**
      * Returns a new builder.
      *
      * @return new builder
@@ -167,43 +153,18 @@ public final class IntDeviceConfig {
         return new Builder();
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        IntDeviceConfig that = (IntDeviceConfig) o;
-        return enabled == that.enabled &&
-                hopLatencySensitivity == that.hopLatencySensitivity &&
-                Objects.equal(collectorIp, that.collectorIp) &&
-                Objects.equal(collectorPort, that.collectorPort) &&
-                Objects.equal(collectorNextHopMac, that.collectorNextHopMac) &&
-                Objects.equal(sinkIp, that.sinkIp) &&
-                Objects.equal(sinkMac, that.sinkMac) &&
-                spec == that.spec;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(collectorIp, collectorPort, collectorNextHopMac,
-                sinkIp, sinkMac, spec, enabled, hopLatencySensitivity);
-    }
-
     /**
      * An IntConfig object builder.
      */
     public static final class Builder {
-        private IpAddress collectorIp = IpAddress.valueOf(0);
-        private TpPort collectorPort = TpPort.tpPort(0);
-        private MacAddress collectorNextHopMac = MacAddress.valueOf(0);
-        private IpAddress sinkIp = IpAddress.valueOf(0);
-        private MacAddress sinkMac = MacAddress.valueOf(0);
+
+        private IpAddress collectorIp;
+        private TpPort collectorPort;
+        private MacAddress collectorNextHopMac;
+        private IpAddress sinkIp;
+        private MacAddress sinkMac;
         private TelemetrySpec spec = TelemetrySpec.INT;
         private boolean enabled = false;
-        int minFlowHopLatencyChangeNs = 0;
 
         /**
          * Assigns a collector IP address to the IntConfig object.
@@ -285,17 +246,6 @@ public final class IntDeviceConfig {
         }
 
         /**
-         * Sets the minimal interval of hop latency change for a flow.
-         *
-         * @param value the minimal interval of hop latency change for a flow
-         * @return an IntConfig builder
-         */
-        public IntDeviceConfig.Builder withMinFlowHopLatencyChangeNs(int value) {
-            this.minFlowHopLatencyChangeNs = value;
-            return this;
-        }
-
-        /**
          * Builds the IntConfig object.
          *
          * @return an IntConfig object
@@ -303,10 +253,11 @@ public final class IntDeviceConfig {
         public IntDeviceConfig build() {
             checkNotNull(collectorIp, "Collector IP should be specified.");
             checkNotNull(collectorPort, "Collector port number should be specified.");
-            checkArgument(minFlowHopLatencyChangeNs >= 0, "Hop latency sensitivity must be positive or zero");
-
+            checkNotNull(collectorNextHopMac, "Next hop MAC address for report packets should be provided.");
+            checkNotNull(sinkIp, "Sink IP address for report packets should be specified.");
+            checkNotNull(sinkMac, "Sink MAC address for report packets should be specified.");
             return new IntDeviceConfig(collectorIp, collectorPort, collectorNextHopMac,
-                    sinkIp, sinkMac, spec, enabled, minFlowHopLatencyChangeNs);
+                                 sinkIp, sinkMac, spec, enabled);
         }
     }
 }

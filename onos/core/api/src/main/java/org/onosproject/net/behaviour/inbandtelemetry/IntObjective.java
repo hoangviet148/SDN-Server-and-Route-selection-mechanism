@@ -15,13 +15,14 @@
  */
 package org.onosproject.net.behaviour.inbandtelemetry;
 
-import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableSet;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.TrafficSelector;
 
 import java.util.HashSet;
 import java.util.Set;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 /**
  * Represents a device-level objective to collect INT metadata for packets
@@ -66,33 +67,6 @@ public final class IntObjective {
     }
 
     /**
-     * Returns a new INT objective builder.
-     *
-     * @return INT objective builder
-     */
-    public static IntObjective.Builder builder() {
-        return new Builder();
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        IntObjective that = (IntObjective) o;
-        return Objects.equal(selector, that.selector) &&
-                Objects.equal(metadataTypes, that.metadataTypes);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(selector, metadataTypes);
-    }
-
-    /**
      * An IntObjective builder.
      */
     public static final class Builder {
@@ -127,6 +101,9 @@ public final class IntObjective {
          * @return an IntObjective
          */
         public IntObjective build() {
+            checkArgument(!selector.criteria().isEmpty(), "Empty selector cannot match any flow.");
+            checkArgument(!metadataTypes.isEmpty(), "Metadata types cannot be empty");
+
             return new IntObjective(selector, metadataTypes);
         }
     }

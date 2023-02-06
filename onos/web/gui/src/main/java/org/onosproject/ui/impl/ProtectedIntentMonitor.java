@@ -96,6 +96,7 @@ public class ProtectedIntentMonitor extends AbstractTopoMonitor {
         SELECTED_INTENT
     }
 
+    private final long trafficPeriod;
     private final ServicesBundle services;
     private final TopologyViewMessageHandler msgHandler;
 
@@ -109,11 +110,13 @@ public class ProtectedIntentMonitor extends AbstractTopoMonitor {
     /**
      * Constructs a protected intent monitor.
      *
+     * @param trafficPeriod traffic task period in ms
      * @param services      bundle of services
      * @param msgHandler    our message handler
      */
-    public ProtectedIntentMonitor(ServicesBundle services,
+    public ProtectedIntentMonitor(long trafficPeriod, ServicesBundle services,
                                   TopologyViewMessageHandler msgHandler) {
+        this.trafficPeriod = trafficPeriod;
         this.services = services;
         this.msgHandler = msgHandler;
     }

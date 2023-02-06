@@ -64,14 +64,6 @@ public interface FlowRuleService
     }
 
     /**
-     * Returns the stored flow.
-     *
-     * @param rule the rule to look for
-     * @return a flow rule
-     */
-    FlowEntry getFlowEntry(FlowRule rule);
-
-    /**
      * Returns the collection of flow entries applied on the specified device.
      * This will include flow rules which may not yet have been applied to
      * the device.
@@ -121,15 +113,6 @@ public interface FlowRuleService
      * @param deviceId device identifier
      */
     void purgeFlowRules(DeviceId deviceId);
-
-    /**
-     * Purges all the flow rules on the specified device from the given application id.
-     * @param deviceId device identifier
-     * @param appId application identifier
-     */
-    default void purgeFlowRules(DeviceId deviceId, ApplicationId appId) {
-        throw new UnsupportedOperationException("purgeFlowRules not implemented!");
-    }
 
     /**
      * Removes the specified flow rules from their respective devices. If the
@@ -196,33 +179,4 @@ public interface FlowRuleService
     default long getActiveFlowRuleCount(DeviceId deviceId) {
         return 0;
     }
-
-    /**
-     * Applies the specified flow rules onto their respective devices. Similar
-     * to {@link FlowRuleService#applyFlowRules(FlowRule...)} but expectation is
-     * that flow rules applied by subsequent calls using the same key will be
-     * executed sequentially. Flow rules applied through {@link FlowRuleService#applyFlowRules(FlowRule...)}
-     * might be executed in parallel.
-     *
-     * @param stripeKey an integer key
-     * @param flowRules one or more flow rules
-     */
-    default void applyFlowRules(int stripeKey, FlowRule... flowRules) {
-
-    }
-
-    /**
-     * Removes the specified flow rules from their respective devices. Similar
-     * to {@link FlowRuleService#removeFlowRules(FlowRule...)} but expectation is
-     * that flow rules removed by subsequent calls using the same key will be
-     * executed sequentially. Flow rules applied through {@link FlowRuleService#removeFlowRules(FlowRule...)}
-     * might be executed in parallel.
-     *
-     * @param stripeKey an integer key
-     * @param flowRules one or more flow rules
-     */
-    default void removeFlowRules(int stripeKey, FlowRule... flowRules) {
-
-    }
-
 }

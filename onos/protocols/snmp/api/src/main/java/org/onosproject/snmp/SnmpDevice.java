@@ -107,11 +107,4 @@ public interface SnmpDevice {
      * @return DeviceId
      */
     DeviceId deviceId();
-
-    /**
-     * Return the SNMP protocol version.
-     *
-     * @return SNMP protocol version
-     */
-    int getVersion();
 }

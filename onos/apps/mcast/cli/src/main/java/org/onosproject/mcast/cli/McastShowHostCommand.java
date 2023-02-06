@@ -15,8 +15,6 @@
  */
 package org.onosproject.mcast.cli;
 
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.karaf.shell.api.action.Command;
 import org.apache.karaf.shell.api.action.Completion;
 import org.apache.karaf.shell.api.action.Option;
@@ -31,6 +29,7 @@ import org.onosproject.net.HostId;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
 
@@ -42,9 +41,7 @@ import static com.google.common.base.Strings.isNullOrEmpty;
 public class McastShowHostCommand extends AbstractShellCommand {
 
     // Format for group line
-    private static final String FORMAT_MAPPING = "origin=%s, group=%s, source IP=%s, sources=%s, sinks=%s\n";
-    private StringBuilder routesBuilder = new StringBuilder();
-    private ArrayNode routesNode = mapper().createArrayNode();
+    private static final String FORMAT_MAPPING = "origin=%s, group=%s, source IP=%s, sources=%s, sinks=%s";
 
     @Option(name = "-gAddr", aliases = "--groupAddress",
             description = "IP Address of the multicast group",
@@ -68,43 +65,41 @@ public class McastShowHostCommand extends AbstractShellCommand {
                     .findAny().orElse(null);
             // If it exists
             if (mcastRoute != null) {
-                prepareResult(mcastService, mcastRoute);
+                printRoute(mcastService, mcastRoute);
             }
-        } else {
-            routes.stream()
-                    .filter(mcastRoute -> mcastRoute.group().isIp4())
-                    .sorted(Comparator.comparing(McastRoute::group))
-                    .forEach(route -> {
-                        prepareResult(mcastService, route);
-                    });
-            routes.stream()
-                    .filter(mcastRoute -> mcastRoute.group().isIp6())
-                    .sorted(Comparator.comparing(McastRoute::group))
-                    .forEach(route -> {
-                        prepareResult(mcastService, route);
-                    });
+            return;
         }
-        if (outputJson()) {
-            print("%s", routesNode);
-        } else {
-            print("%s", routesBuilder.toString());
-        }
+        // Filter ipv4
+        Set<McastRoute> ipv4Routes = routes.stream()
+                .filter(mcastRoute -> mcastRoute.group().isIp4())
+                .collect(Collectors.toSet());
+        // Print ipv4 first
+        ipv4Routes.stream()
+                .sorted(Comparator.comparing(McastRoute::group))
+                .forEach(route -> {
+                    printRoute(mcastService, route);
+                });
+        // Filter ipv6
+        Set<McastRoute> ipv6Routes = routes.stream()
+                .filter(mcastRoute -> mcastRoute.group().isIp6())
+                .collect(Collectors.toSet());
+        // Then print ipv6
+        ipv6Routes.stream()
+                .sorted(Comparator.comparing(McastRoute::group))
+                .forEach(route -> {
+                    printRoute(mcastService, route);
+                });
     }
 
-    private void prepareResult(MulticastRouteService mcastService, McastRoute route) {
-        if (outputJson()) {
-            // McastHostRouteCodec is used to encode McastRoute
-            ObjectNode routeNode = jsonForEntity(route, McastRoute.class);
-            routesNode.add(routeNode);
-        } else {
-            Map<HostId, Set<ConnectPoint>> sinks = mcastService.routeData(route).sinks();
-            Map<HostId, Set<ConnectPoint>> sources = mcastService.routeData(route).sources();
-            String srcIp = "*";
-            if (route.source().isPresent()) {
-                srcIp = route.source().get().toString();
-            }
-            routesBuilder.append(String.format(FORMAT_MAPPING, route.type(), route.group(), srcIp, sources, sinks));
+    private void printRoute(MulticastRouteService mcastService, McastRoute route) {
+        Map<HostId, Set<ConnectPoint>> sinks = mcastService.routeData(route).sinks();
+        Map<HostId, Set<ConnectPoint>> sources = mcastService.routeData(route).sources();
+        String srcIp = "*";
+        if (route.source().isPresent()) {
+            srcIp = route.source().get().toString();
         }
+
+        print(FORMAT_MAPPING, route.type(), route.group(), srcIp, sources, sinks);
     }
 
 }

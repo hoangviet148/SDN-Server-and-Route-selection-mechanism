@@ -35,7 +35,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Collection;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
@@ -66,9 +65,6 @@ public class RouteMonitor {
     private final ScheduledExecutorService reaperExecutor =
             newSingleThreadScheduledExecutor(groupedThreads("route/reaper", "", log));
 
-    private final ExecutorService eventExecutor = newSingleThreadScheduledExecutor(groupedThreads(
-            "onos/routemonitor", "events-%d", log));
-
     /**
      * Creates a new route monitor.
      *
@@ -98,8 +94,6 @@ public class RouteMonitor {
     public void shutdown() {
         stopProcessing();
         clusterService.removeListener(clusterListener);
-        eventExecutor.shutdownNow();
-        reaperExecutor.shutdownNow();
         asyncLock.unlock();
     }
 
@@ -151,38 +145,31 @@ public class RouteMonitor {
 
         @Override
         public void event(ClusterEvent event) {
-            eventExecutor.execute(() -> {
-                if (event.instanceType() == ClusterEvent.InstanceType.STORAGE) {
-                    log.debug("Skipping cluster event for {}", event.subject().id().id());
-                    return;
-                }
+            switch (event.type()) {
+            case INSTANCE_DEACTIVATED:
+                NodeId id = event.subject().id();
+                log.info("Node {} deactivated", id);
 
-                switch (event.type()) {
-                    case INSTANCE_DEACTIVATED:
-                        NodeId id = event.subject().id();
-                        log.info("Node {} deactivated", id);
-
-                        // DistributedLock is introduced to guarantee that minority nodes won't try to remove
-                        // routes that originated from majority nodes.
-                        // Adding 15 seconds retry for the leadership election to be completed.
-                        asyncLock.tryLock(Duration.ofSeconds(15)).whenComplete((result, error) -> {
-                            if (result != null && result.isPresent()) {
-                                log.debug("Lock obtained. Put {} into removal queue", id);
-                                queue.addOne(id);
-                                asyncLock.unlock();
-                            } else {
-                                log.debug("Fail to obtain lock. Do not remove routes from {}", id);
-                            }
-                        });
-                        break;
-                    case INSTANCE_ADDED:
-                    case INSTANCE_REMOVED:
-                    case INSTANCE_ACTIVATED:
-                    case INSTANCE_READY:
-                    default:
-                        break;
-                }
-            });
+                // DistributedLock is introduced to guarantee that minority nodes won't try to remove
+                // routes that originated from majority nodes.
+                // Adding 15 seconds retry for the leadership election to be completed.
+                asyncLock.tryLock(Duration.ofSeconds(15)).whenComplete((result, error) -> {
+                    if (result != null && result.isPresent()) {
+                        log.debug("Lock obtained. Put {} into removal queue", id);
+                        queue.addOne(id);
+                        asyncLock.unlock();
+                    } else {
+                        log.debug("Fail to obtain lock. Do not remove routes from {}", id);
+                    }
+                });
+                break;
+            case INSTANCE_ADDED:
+            case INSTANCE_REMOVED:
+            case INSTANCE_ACTIVATED:
+            case INSTANCE_READY:
+            default:
+                break;
+            }
         }
     }
 }

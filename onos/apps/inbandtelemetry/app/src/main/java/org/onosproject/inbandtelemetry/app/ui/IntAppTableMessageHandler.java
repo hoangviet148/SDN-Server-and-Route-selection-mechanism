@@ -41,7 +41,6 @@ import java.util.Set;
  */
 public class IntAppTableMessageHandler extends UiMessageHandler {
     private static final String INT_APP_INT_INTENT = "intAppIntIntent";
-    private static final String INT_APP_INT_INTENT_PAYLOAD = "intAppIntIntents";
     private static final String INT_APP_INT_INTENT_DATA_REQUEST = INT_APP_INT_INTENT + "DataRequest";
     private static final String INT_APP_INT_INTENT_DATA_RESPONSE = INT_APP_INT_INTENT + "DataResponse";
 
@@ -56,10 +55,8 @@ public class IntAppTableMessageHandler extends UiMessageHandler {
     private static final String DST_PORT = "dstPort";
     private static final String PROTOCOL = "protocol";
     private static final String METADATA = "metadata";
-    private static final String TELEMETRY_MODE = "telemetryMode";
 
-    private static final String[] COLUMN_IDS = {
-            ID, SRC_ADDR, DST_ADDR, SRC_PORT, DST_PORT, PROTOCOL, METADATA, TELEMETRY_MODE};
+    private static final String[] COLUMN_IDS = {ID, SRC_ADDR, DST_ADDR, SRC_PORT, DST_PORT, PROTOCOL, METADATA};
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -77,7 +74,7 @@ public class IntAppTableMessageHandler extends UiMessageHandler {
     private final class IntAppIntIntentRequestHandler extends TableRequestHandler {
 
         private IntAppIntIntentRequestHandler() {
-            super(INT_APP_INT_INTENT_DATA_REQUEST, INT_APP_INT_INTENT_DATA_RESPONSE, INT_APP_INT_INTENT_PAYLOAD);
+            super(INT_APP_INT_INTENT_DATA_REQUEST, INT_APP_INT_INTENT_DATA_RESPONSE, INT_APP_INT_INTENT);
         }
 
         @Override
@@ -132,7 +129,6 @@ public class IntAppTableMessageHandler extends UiMessageHandler {
                 metaStr += ", ";
             }
             row.cell(METADATA, metaStr);
-            row.cell(TELEMETRY_MODE, intent.telemetryMode());
         }
     }
 

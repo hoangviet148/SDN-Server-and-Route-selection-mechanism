@@ -36,8 +36,6 @@ import org.onosproject.net.intent.IntentService;
 import org.onosproject.net.intent.Key;
 import org.onosproject.net.link.LinkAdminService;
 import org.onosproject.net.meter.MeterService;
-import org.onosproject.net.packet.PacketService;
-import org.onosproject.net.packet.PacketRequest;
 import org.onosproject.net.region.RegionAdminService;
 import org.onosproject.ui.UiExtensionService;
 import org.onosproject.ui.UiTopoLayoutService;
@@ -78,7 +76,6 @@ public class WipeOutCommand extends AbstractShellCommand {
         wipeOutDevices();
         wipeOutLinks();
         wipeOutNetworkConfig();
-        wipeOutPacketRequests();
 
         wipeOutLayouts();
         wipeOutRegions();
@@ -186,14 +183,6 @@ public class WipeOutCommand extends AbstractShellCommand {
             } catch (Exception e) {
                 log.info("Unable to wipe-out links", e);
             }
-        }
-    }
-
-    private void wipeOutPacketRequests() {
-        print("Wiping packet requests");
-        PacketService service = get(PacketService.class);
-        for (PacketRequest r : service.getRequests()) {
-            service.cancelPackets(r.selector(), r.priority(), r.appId(), r.deviceId());
         }
     }
 

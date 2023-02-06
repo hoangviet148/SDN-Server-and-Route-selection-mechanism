@@ -25,7 +25,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.karaf.shell.api.action.Command;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
-import org.onlab.packet.IpAddress;
 import org.onosproject.cluster.ClusterAdminService;
 import org.onosproject.cluster.Node;
 
@@ -59,10 +58,9 @@ public class StorageNodesListCommand extends AbstractShellCommand {
         ObjectMapper mapper = new ObjectMapper();
         ArrayNode result = mapper.createArrayNode();
         for (Node node : nodes) {
-            IpAddress nodeIp = node.ip();
             ObjectNode newNode = mapper.createObjectNode()
                     .put("id", node.id().toString())
-                    .put("ip", nodeIp != null ? nodeIp.toString() : node.host())
+                    .put("ip", node.ip().toString())
                     .put("host", node.host())
                     .put("tcpPort", node.tcpPort());
             result.add(newNode);

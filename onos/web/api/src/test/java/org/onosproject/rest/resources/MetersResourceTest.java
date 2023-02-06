@@ -442,7 +442,7 @@ public class MetersResourceTest extends ResourceTest {
     public void testMeterSingleDeviceWithId() {
         setupMockMeters();
 
-        expect(mockMeterService.getMeter(anyObject(), anyObject(MeterCellId.class)))
+        expect(mockMeterService.getMeter(anyObject(), anyObject()))
                 .andReturn(meter5).anyTimes();
         replay(mockMeterService);
         replay(mockDeviceService);
@@ -467,7 +467,7 @@ public class MetersResourceTest extends ResourceTest {
     public void testMeterByDeviceIdAndMeterId() {
         setupMockMeters();
 
-        expect(mockMeterService.getMeter(anyObject(), anyObject(MeterCellId.class)))
+        expect(mockMeterService.getMeter(anyObject(), anyObject()))
                 .andReturn(null).anyTimes();
         replay(mockMeterService);
 
@@ -526,7 +526,9 @@ public class MetersResourceTest extends ResourceTest {
     @Test
     public void testDelete() {
         setupMockMeters();
-        mockMeterService.withdraw(anyObject(), anyObject(MeterCellId.class));
+        expect(mockMeterService.getMeter(anyObject(), anyObject()))
+                .andReturn(meter5).anyTimes();
+        mockMeterService.withdraw(anyObject(), anyObject());
         expectLastCall();
         replay(mockMeterService);
 

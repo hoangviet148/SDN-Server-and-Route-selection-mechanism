@@ -18,17 +18,14 @@ package org.onosproject.workflow.api;
 
 import com.fasterxml.jackson.core.JsonPointer;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.BooleanNode;
 import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.JsonNodeType;
 import com.fasterxml.jackson.databind.node.MissingNode;
-import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -36,10 +33,6 @@ import com.google.common.base.MoreObjects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -99,11 +92,11 @@ public final class JsonDataModelTree implements DataModelTree {
     private void attach(JsonPointer ptr, JsonNode attachingNode) throws WorkflowException {
 
         JsonNode node = root.at(ptr);
-        if (!(node instanceof MissingNode || node instanceof NullNode)) {
+        if (!(node instanceof MissingNode)) {
             throw new WorkflowException("Path(" + ptr + ") has already subtree(" + node + ")");
         }
 
-        if (isArrayIndex(ptr.last())) {
+        if (ptr.last().getMatchingIndex() != -1) {
 
             alloc(ptr.head(), Nodetype.ARRAY);
             JsonNode parentNode = root.at(ptr.head());
@@ -111,14 +104,9 @@ public final class JsonDataModelTree implements DataModelTree {
                 throw new WorkflowException("Invalid parentNode type(" + parentNode.getNodeType() + " != Array)");
             }
             int index = ptr.last().getMatchingIndex();
-
-            if (parentNode.get(index) instanceof NullNode) {
-                ((ArrayNode) parentNode).remove(index);
-            }
-
             ((ArrayNode) parentNode).insert(index, attachingNode);
 
-        } else if (isMapKey(ptr.last())) {
+        } else if (ptr.last().getMatchingProperty() != null) {
 
             alloc(ptr.head(), Nodetype.MAP);
             JsonNode parentNode = root.at(ptr.head());
@@ -136,16 +124,10 @@ public final class JsonDataModelTree implements DataModelTree {
     @Override
     public void remove(String path) throws WorkflowException {
         JsonPointer ptr = JsonPointer.compile(path);
-        clear(ptr, true);
+        remove(ptr);
     }
 
-    @Override
-    public void clear(String path) throws WorkflowException {
-        JsonPointer ptr = JsonPointer.compile(path);
-        clear(ptr, false);
-    }
-
-    private void clear(JsonPointer ptr, boolean dispose) throws WorkflowException {
+    private void remove(JsonPointer ptr) throws WorkflowException {
 
         JsonNode node = root.at(ptr);
         if (node instanceof MissingNode) {
@@ -153,31 +135,23 @@ public final class JsonDataModelTree implements DataModelTree {
             return;
         }
 
-        if (isArrayIndex(ptr.last())) {
+        if (ptr.last().getMatchingIndex() != -1) {
 
             JsonNode parentNode = root.at(ptr.head());
             if (!parentNode.isArray()) {
                 throw new WorkflowException("Invalid parentNode type(" + parentNode.getNodeType() + " != Array)");
             }
             int index = ptr.last().getMatchingIndex();
-            if (dispose) {
-                ((ArrayNode) parentNode).remove(index);
-            } else {
-                ((ArrayNode) parentNode).set(index, NullNode.getInstance());
-            }
+            ((ArrayNode) parentNode).remove(index);
 
-        } else if (isMapKey(ptr.last())) {
+        } else if (ptr.last().getMatchingProperty() != null) {
 
             JsonNode parentNode = root.at(ptr.head());
             if (!parentNode.isObject()) {
                 throw new WorkflowException("Invalid parentNode type(" + parentNode.getNodeType() + " != Object)");
             }
             String key = ptr.last().getMatchingProperty();
-            if (dispose) {
-                ((ObjectNode) parentNode).remove(key);
-            } else {
-                ((ObjectNode) parentNode).putNull(key);
-            }
+            ((ObjectNode) parentNode).remove(key);
 
         } else {
             throw new WorkflowException("Invalid path(" + ptr + ")");
@@ -389,35 +363,6 @@ public final class JsonDataModelTree implements DataModelTree {
     }
 
     /**
-     * Gets list on specific path.
-     *
-     * @param path path of json node
-     * @param <T> class type
-     * @param listDataTypeClass data type class of list
-     * @return list on specific path
-     * @throws WorkflowException workflow exception
-     */
-    public <T> List<T> listAt(String path, Class<T> listDataTypeClass) throws WorkflowException {
-        JsonPointer ptr = JsonPointer.compile(path);
-        return listAt(ptr, listDataTypeClass);
-    }
-
-    /**
-     * Gets map on specific path.
-     *
-     * @param path path of json node
-     * @param <T> class type
-     * @param mapDataTypeClass data type of map value
-     * @return map of specific class type
-     * @throws WorkflowException workflow excepion
-     */
-    public <T> Map<String, T> mapAt(String path, Class<T> mapDataTypeClass) throws WorkflowException {
-        JsonPointer ptr = JsonPointer.compile(path);
-        return mapAt(ptr, mapDataTypeClass);
-    }
-
-
-    /**
      * Gets integer on specific json pointer.
      *
      * @param ptr json pointer
@@ -435,61 +380,7 @@ public final class JsonDataModelTree implements DataModelTree {
         if (!(node instanceof NumericNode)) {
             throw new WorkflowException("Invalid node(" + node + ") at " + ptr);
         }
-        return node.asInt();
-    }
-
-    /**
-     * Gets list on specific json pointer.
-     *
-     * @param ptr json pointer
-     * @param <T> class type
-     * @param listDataTypeClass data type class of list
-     * @return list on specific json pointer
-     * @throws WorkflowException workflow exception
-     */
-    public <T> List<T> listAt(JsonPointer ptr, Class<T> listDataTypeClass) {
-        List<T> list = new ArrayList<>();
-        try {
-            if (root == null || root instanceof MissingNode) {
-                throw new WorkflowException("Invalid root node");
-            }
-            JsonNode node = root.at(ptr);
-            ObjectMapper objectMapper = new ObjectMapper();
-            ObjectReader reader = objectMapper.readerFor(new TypeReference<List<T>>() {
-            });
-            if (node.isMissingNode()) {
-                return null;
-            }
-            list = reader.readValue(node);
-        } catch (Exception e) {
-            log.info("exception while parsing list {}", e.getStackTrace());
-        }
-        return list;
-    }
-
-    /**
-     * Gets map on specific json pointer.
-     *
-     * @param ptr json pointer
-     * @param <T> class type
-     * @param mapDataTypeClass data type class of value in the map
-     * @return map on specific json pointer
-     */
-    public <T> Map<String, T> mapAt(JsonPointer ptr, Class<T> mapDataTypeClass) {
-        Map<String, T> map = new HashMap<>();
-        try {
-            if (root == null || root instanceof MissingNode) {
-                throw new WorkflowException("Invalid root node");
-            }
-            JsonNode node = root.at(ptr);
-            ObjectMapper objectMapper = new ObjectMapper();
-            ObjectReader reader = objectMapper.readerFor(new TypeReference<Map<String, T>>() {
-            });
-            map = reader.readValue(node);
-        } catch (Exception e) {
-            log.info("exception while parsing map {}", e.getStackTrace());
-        }
-        return map;
+        return ((NumericNode) node).asInt();
     }
 
     /**
@@ -661,57 +552,6 @@ public final class JsonDataModelTree implements DataModelTree {
     }
 
     /**
-     * Sets list on specific json path.
-     *
-     * @param path json path
-     * @param list list to set
-     * @throws WorkflowException workflow exception
-     */
-    public void setAt(String path, List list) throws WorkflowException {
-        JsonPointer ptr = JsonPointer.compile(path);
-        setAt(ptr, list);
-    }
-
-    /**
-     * Sets list on the specific json pointer.
-     *
-     * @param ptr  json pointer
-     * @param list list to set
-     * @throws WorkflowException workflow exception
-     */
-    public void setAt(JsonPointer ptr, List list) throws WorkflowException {
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode node = mapper.valueToTree(list);
-        attach(ptr, node);
-    }
-
-    /**
-     * Sets map on specific json path.
-     *
-     * @param path json path
-     * @param map  map to set
-     * @throws WorkflowException workflow exception
-     */
-    public void setAt(String path, Map map) throws WorkflowException {
-        JsonPointer ptr = JsonPointer.compile(path);
-        setAt(ptr, map);
-    }
-
-    /**
-     * Sets map on the specific json pointer.
-     *
-     * @param ptr json pointer
-     * @param map map to set
-     * @throws WorkflowException workflow exception
-     */
-    public void setAt(JsonPointer ptr, Map map) throws WorkflowException {
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode node = mapper.valueToTree(map);
-        attach(ptr, node);
-    }
-
-
-    /**
      * Sets integer on the specific json pointer.
      *
      * @param ptr    json pointer
@@ -734,8 +574,8 @@ public final class JsonDataModelTree implements DataModelTree {
      */
     private JsonNode alloc(JsonNode node, JsonPointer ptr, JsonNodeType leaftype) throws WorkflowException {
 
-        if (ptr.matches()) { // node is leaf
-            if (node == null || node instanceof MissingNode || node instanceof NullNode) {
+        if (ptr.matches()) {
+            if (node == null || node instanceof MissingNode) {
                 node = createEmpty(leaftype);
             } else {
                 //TODO: checking existing node type is matched with leaftype
@@ -747,27 +587,19 @@ public final class JsonDataModelTree implements DataModelTree {
             return node;
         }
 
-        // node is intermediate in the ptr
-        if (isArrayIndex(ptr)) {
-            if (node == null || node instanceof MissingNode || node instanceof NullNode) {
+        if (ptr.getMatchingIndex() != -1) {
+            if (node == null || node instanceof MissingNode) {
                 node = createEmpty(JsonNodeType.ARRAY);
             }
             JsonNode child = alloc(node.get(ptr.getMatchingIndex()), ptr.tail(), leaftype);
             if (!node.has(ptr.getMatchingIndex())) {
                 ((ArrayNode) node).insert(ptr.getMatchingIndex(), child);
-            } else {
-                ((ArrayNode) node).set(ptr.getMatchingIndex(), child);
             }
-        } else if (isMapKey(ptr)) {
-            if (node == null || node instanceof MissingNode || node instanceof NullNode) {
+        } else if (ptr.getMatchingProperty() != null) {
+            if (node == null || node instanceof MissingNode) {
                 node = createEmpty(JsonNodeType.OBJECT);
             }
             JsonNode child = alloc(node.get(ptr.getMatchingProperty()), ptr.tail(), leaftype);
-
-            if (node.get(ptr.getMatchingProperty()) instanceof NullNode) {
-                ((ObjectNode) node).remove(ptr.getMatchingProperty());
-            }
-
             if (!node.has(ptr.getMatchingProperty())) {
                 ((ObjectNode) node).put(ptr.getMatchingProperty(), child);
             }
@@ -807,24 +639,6 @@ public final class JsonDataModelTree implements DataModelTree {
             log.error("Exception: ", e);
         }
         return str;
-    }
-
-    /**
-     * Returns whether the json ptr is array type(having array index) or not.
-     * @param ptr
-     * @return Whether the json ptr is array type(having array index) or not.
-     */
-    private boolean isArrayIndex(JsonPointer ptr) {
-        return (ptr.getMatchingIndex() != -1);
-    }
-
-    /**
-     * Returns whether the json ptr is map type(having key) or not.
-     * @param ptr
-     * @return Whether the json ptr is map type(having key) or not.
-     */
-    private boolean isMapKey(JsonPointer ptr) {
-        return (ptr.getMatchingProperty() != null);
     }
 
     @Override

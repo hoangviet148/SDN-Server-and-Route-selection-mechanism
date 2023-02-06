@@ -77,8 +77,6 @@
                     <td colId="currentInputPower">CURRENT INPUT POWER (dBm)</td>
                     <td colId="targetPower">TARGET OUTPUT POWER (dBm)</td>
                     <td colId="hasTargetPower">HAS TARGET POWER</td>
-                    <td colId="PRE_FEC_BER">PRE FEC BER</td>
-                    <td colId="POST_FEC_BER">POST FEC BER</td>
                     <td colId="serviceState">SERVICE STATE</td>
                 </tr>
             </table>
@@ -124,8 +122,6 @@
                         </form>
                     </td>
                     <td [ngClass]="(isDelta() ? 'delta' : '')">{{port.hasTargetPower}}</td>
-                    <td [ngClass]="(isDelta() ? 'delta' : '')">{{convertNumber(port.preFecBitErrorRate)}}</td>
-                    <td [ngClass]="(isDelta() ? 'delta' : '')">{{convertNumber(port.postFecBitErrorRate)}}</td>
                     <td [ngClass]="(isDelta() ? 'delta' : '')">{{port.serviceState}}</td>
                 </tr>
             </table>

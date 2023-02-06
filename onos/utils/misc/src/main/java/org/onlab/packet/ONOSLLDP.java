@@ -33,6 +33,13 @@ import javax.crypto.spec.SecretKeySpec;
 import static org.onlab.packet.LLDPOrganizationalTLV.OUI_LENGTH;
 import static org.onlab.packet.LLDPOrganizationalTLV.SUBTYPE_LENGTH;
 import static org.slf4j.LoggerFactory.getLogger;
+import java.util.Map;
+import java.lang.*;
+import java.util.*;
+//import java.util.concurrent.ConcurrentHashMap;
+//import java.util.concurrent.CopyOnWriteArrayList;
+
+
 
 /**
  *  ONOS LLDP containing organizational TLV for ONOS device discovery.
@@ -69,6 +76,11 @@ public class ONOSLLDP extends LLDP {
     private static final byte PORT_DESC_TLV_TYPE = 4;
 
     private final byte[] ttlValue = new byte[] {0, 0x78};
+
+    // Arraylist for packet loss of LLDP packets
+    //public static Map<String, ArrayList<Long>> linkPacketLossLLDP = new ConcurrentHashMap<String, ArrayList<Long>>();
+    public static Map<String, ArrayList<Long>> linkPacketLossLLDP = new HashMap<String, ArrayList<Long>>();
+
 
     // Only needs to be accessed from LinkProbeFactory.
     public ONOSLLDP(byte... subtype) {
@@ -252,7 +264,7 @@ public class ONOSLLDP extends LLDP {
             }
         }
 
-        log.debug("Cannot find the port description tlv type.");
+        log.error("Cannot find the port description tlv type.");
         return null;
     }
 
@@ -349,6 +361,20 @@ public class ONOSLLDP extends LLDP {
         }
         return null;
     }
+    public static void removeElement(String id, long e){
+        if(linkPacketLossLLDP.get(id) != null){
+            if(linkPacketLossLLDP.get(id).contains(e)){
+                linkPacketLossLLDP.get(id).remove(e);
+            }
+        }
+
+    }
+    public static ArrayList<Long> getArray(String id){
+        if(linkPacketLossLLDP.get(id) != null){
+            return linkPacketLossLLDP.get(id);
+        }
+        return null;        
+    }
 
     /**
      * Given an ethernet packet, determines if this is an LLDP from
@@ -421,6 +447,7 @@ public class ONOSLLDP extends LLDP {
         probe.setDevice(deviceId);
         probe.setChassisId(chassisId);
 
+
         if (secret != null) {
             /* Secure Mode */
             long ts = System.currentTimeMillis();
@@ -431,6 +458,23 @@ public class ONOSLLDP extends LLDP {
             }
             probe.setSig(sig);
             sig = null;
+            
+            //if((deviceId.compareTo("of:0000000000000006") == 0 && portNum == 3) || (deviceId.compareTo("of:0000000000000003") == 0 && portNum == 2)){
+                //Add timestamp for calculating the packtlos of LLDP
+                String linkID = deviceId.toString()+"-"+String.valueOf(portNum);
+
+                if(linkPacketLossLLDP.get(linkID) == null){
+
+                    linkPacketLossLLDP.put(linkID, new ArrayList<Long>());
+                    linkPacketLossLLDP.get(linkID).add(ts);
+
+                }else{
+                    linkPacketLossLLDP.get(linkID).add(ts);
+                }
+            //}
+            
+            
+
         }
         return probe;
     }

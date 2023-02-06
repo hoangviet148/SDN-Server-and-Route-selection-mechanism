@@ -17,8 +17,6 @@ package org.onosproject.workflow.api;
 
 import com.google.common.base.MoreObjects;
 
-import java.util.UUID;
-
 /**
  * WorkflowContext for system workflow.
  */
@@ -28,11 +26,6 @@ public class SystemWorkflowContext extends DefaultWorkflowContext {
      * Timestamp when this system workflow context was created.
      */
     private final long timestamp;
-
-    /**
-     * UUID of this system workflow context.
-     */
-    private final String uuid;
 
     /**
      * Distributor string for designating which onos node executes this workflow context with work partition.
@@ -46,7 +39,6 @@ public class SystemWorkflowContext extends DefaultWorkflowContext {
     public SystemWorkflowContext(Builder builder) {
         super(builder);
         timestamp = System.currentTimeMillis();
-        uuid = UUID.randomUUID().toString();
         //initial distributor(It can be changed)
         distributor = name();
     }
@@ -67,7 +59,7 @@ public class SystemWorkflowContext extends DefaultWorkflowContext {
     @Override
     public String name() {
         return workflowId().toString()
-                + ":" + uuid
+                + ":" + timestamp
                 + "@" + workplaceName();
     }
 

@@ -98,10 +98,12 @@ import java.util.concurrent.locks.Lock;
 import java.util.function.Supplier;
 
 import static java.util.concurrent.Executors.newScheduledThreadPool;
-import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.netconf.NetconfDeviceInfo.extractIpPortPath;
-import static org.onosproject.provider.netconf.device.impl.OsgiPropertyConstants.*;
+import static org.onosproject.provider.netconf.device.impl.OsgiPropertyConstants.MAX_RETRIES;
+import static org.onosproject.provider.netconf.device.impl.OsgiPropertyConstants.MAX_RETRIES_DEFAULT;
+import static org.onosproject.provider.netconf.device.impl.OsgiPropertyConstants.POLL_FREQUENCY_SECONDS;
+import static org.onosproject.provider.netconf.device.impl.OsgiPropertyConstants.POLL_FREQUENCY_SECONDS_DEFAULT;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -111,8 +113,6 @@ import static org.slf4j.LoggerFactory.getLogger;
         property = {
                 POLL_FREQUENCY_SECONDS + ":Integer=" + POLL_FREQUENCY_SECONDS_DEFAULT,
                 MAX_RETRIES + ":Integer=" + MAX_RETRIES_DEFAULT,
-                RETRY_FREQUENCY_SECONDS + ":Integer=" + RETRY_FREQUENCY_SECONDS_DEFAULT,
-                FORCE_PORT_UPDATES + ":Boolean=" + FORCE_PORT_UPDATES_DEFAULT
         })
 public class NetconfDeviceProvider extends AbstractProvider
         implements DeviceProvider {
@@ -167,29 +167,16 @@ public class NetconfDeviceProvider extends AbstractProvider
      */
     private int maxRetries = MAX_RETRIES_DEFAULT;
 
-    /**
-     * Configure retry frequency for connecting with device again; default is 30 sec.
-     */
-    private int retryFrequency = RETRY_FREQUENCY_SECONDS_DEFAULT;
-
-    /**
-     * Configure option to allow ports to be periodically updated; default is false.
-     */
-    private boolean forcePortUpdates = FORCE_PORT_UPDATES_DEFAULT;
-
     protected ExecutorService connectionExecutor = Executors.newFixedThreadPool(CORE_POOL_SIZE,
             groupedThreads("onos/netconfDeviceProviderConnection",
                     "connection-executor-%d", log));
     protected ScheduledExecutorService pollingExecutor = newScheduledThreadPool(CORE_POOL_SIZE,
             groupedThreads("onos/netconfDeviceProviderPoll",
                     "polling-executor-%d", log));
-    protected ScheduledExecutorService reconnectionExecutor = newSingleThreadScheduledExecutor(
-            groupedThreads("onos/netconfDeviceProviderReconnection",
-                           "reconnection-executor-%d", log));
+
     protected DeviceProviderService providerService;
     private final Map<DeviceId, AtomicInteger> retriedPortDiscoveryMap = new ConcurrentHashMap<>();
     protected ScheduledFuture<?> scheduledTask;
-    protected ScheduledFuture<?> scheduledReconnectionTask;
     private final Striped<Lock> deviceLocks = Striped.lock(30);
 
     protected final ConfigFactory factory =
@@ -220,8 +207,8 @@ public class NetconfDeviceProvider extends AbstractProvider
         cfgService.addListener(cfgListener);
         controller.addDeviceListener(innerNodeListener);
         deviceService.addListener(deviceListener);
+        pollingExecutor.execute(NetconfDeviceProvider.this::connectDevices);
         scheduledTask = schedulePolling();
-        scheduledReconnectionTask = scheduleConnectDevices();
         modified(context);
         log.info("Started");
     }
@@ -245,7 +232,6 @@ public class NetconfDeviceProvider extends AbstractProvider
         scheduledTask.cancel(true);
         connectionExecutor.shutdown();
         pollingExecutor.shutdown();
-        reconnectionExecutor.shutdown();
         log.info("Stopped");
     }
 
@@ -266,25 +252,6 @@ public class NetconfDeviceProvider extends AbstractProvider
                 scheduledTask = schedulePolling();
                 log.info("Configured. Poll frequency is configured to {} seconds", pollFrequency);
             }
-
-            int newRetryFrequency = Tools.getIntegerProperty(properties, RETRY_FREQUENCY_SECONDS,
-                                                            RETRY_FREQUENCY_SECONDS_DEFAULT);
-
-            if (newRetryFrequency != retryFrequency) {
-                retryFrequency = newRetryFrequency;
-                if (scheduledReconnectionTask != null) {
-                    scheduledReconnectionTask.cancel(false);
-                }
-                scheduledReconnectionTask = scheduleConnectDevices();
-                log.info("Configured. Retry frequency is configured to {} seconds", retryFrequency);
-            }
-
-            boolean newForcePortUpdates = Tools.isPropertyEnabled(properties, FORCE_PORT_UPDATES,
-                                          FORCE_PORT_UPDATES_DEFAULT);
-            if (newForcePortUpdates != forcePortUpdates) {
-                forcePortUpdates = newForcePortUpdates;
-            }
-            log.info("Configured. Force port updates flag is set to {}", forcePortUpdates);
 
             maxRetries = Tools.getIntegerProperty(properties, MAX_RETRIES, MAX_RETRIES_DEFAULT);
             log.info("Configured. Number of retries is configured to {} times", maxRetries);
@@ -334,15 +301,6 @@ public class NetconfDeviceProvider extends AbstractProvider
     }
 
     @Override
-    public boolean isAvailable(DeviceId deviceId) {
-        boolean isReachable = isTcpConnectionAvailable(deviceId);
-        if (isReachable) {
-            return controller.pingDevice(deviceId);
-        }
-        return false;
-    }
-
-    @Override
     public boolean isReachable(DeviceId deviceId) {
         boolean sessionExists =
                 Optional.ofNullable(controller.getDevicesMap().get(deviceId))
@@ -354,7 +312,33 @@ public class NetconfDeviceProvider extends AbstractProvider
 
         //FIXME this is a workaround util device state is shared
         // between controller instances.
-        return isTcpConnectionAvailable(deviceId);
+        Device device = deviceService.getDevice(deviceId);
+        String ip;
+        int port;
+        if (device != null) {
+            ip = device.annotations().value(IPADDRESS);
+            port = Integer.parseInt(device.annotations().value(PORT));
+        } else {
+            Triple<String, Integer, Optional<String>> info = extractIpPortPath(deviceId);
+            ip = info.getLeft();
+            port = info.getMiddle();
+        }
+        // FIXME just opening TCP session probably is not the appropriate
+        // method to test reachability.
+        //test connection to device opening a socket to it.
+        log.debug("Testing reachability for {}:{}", ip, port);
+        Socket socket = new Socket();
+        try {
+            socket.connect(new InetSocketAddress(ip, port), 1000);
+            log.debug("rechability of {}, {}, {}", deviceId, socket.isConnected(), !socket.isClosed());
+            boolean isConnected = socket.isConnected() && !socket.isClosed();
+            socket.close();
+            return isConnected;
+        } catch (IOException e) {
+            log.info("Device {} is not reachable", deviceId);
+            log.debug("  error details", e);
+            return false;
+        }
     }
 
     @Override
@@ -405,36 +389,6 @@ public class NetconfDeviceProvider extends AbstractProvider
         controller.disconnectDevice(deviceId, true);
     }
 
-    private boolean isTcpConnectionAvailable(DeviceId deviceId) {
-        Device device = deviceService.getDevice(deviceId);
-        String ip;
-        int port;
-        if (device != null) {
-            ip = device.annotations().value(IPADDRESS);
-            port = Integer.parseInt(device.annotations().value(PORT));
-        } else {
-            Triple<String, Integer, Optional<String>> info = extractIpPortPath(deviceId);
-            ip = info.getLeft();
-            port = info.getMiddle();
-        }
-        // FIXME just opening TCP session probably is not the appropriate
-        // method to test reachability.
-        //test connection to device opening a socket to it.
-        log.debug("Testing reachability for {}:{}", ip, port);
-        Socket socket = new Socket();
-        try {
-            socket.connect(new InetSocketAddress(ip, port), 1000);
-            log.debug("rechability of {}, {}, {}", deviceId, socket.isConnected(), !socket.isClosed());
-            boolean isConnected = socket.isConnected() && !socket.isClosed();
-            socket.close();
-            return isConnected;
-        } catch (IOException e) {
-            log.info("Device {} is not reachable", deviceId);
-            log.debug("  error details", e);
-            return false;
-        }
-    }
-
     private ScheduledFuture schedulePolling() {
         return pollingExecutor.scheduleAtFixedRate(exceptionSafe(this::checkAndUpdateDevices),
                 pollFrequency / 10,
@@ -451,16 +405,10 @@ public class NetconfDeviceProvider extends AbstractProvider
         };
     }
 
-    private ScheduledFuture scheduleConnectDevices() {
-        return reconnectionExecutor.scheduleAtFixedRate(this::connectDevices, 0, retryFrequency,
-                                                        TimeUnit.SECONDS);
-    }
-
-    /* Connecting devices with initial config. This will keep on retrying infinitely for all devices which are not
-    connecting with ONOS. To stop retry, please remove device from netcfg*/
+    //Connecting devices with initial config
     private void connectDevices() {
         Set<DeviceId> deviceSubjects = cfgService.getSubjects(DeviceId.class, NetconfDeviceConfig.class);
-        deviceSubjects.parallelStream().filter(deviceId -> !deviceService.isAvailable(deviceId)).forEach(deviceId -> {
+        deviceSubjects.parallelStream().forEach(deviceId -> {
             connectionExecutor.execute(exceptionSafe(() -> runElectionFor(deviceId)));
         });
     }
@@ -639,21 +587,23 @@ public class NetconfDeviceProvider extends AbstractProvider
         }
     }
 
+
     private void discoverOrUpdatePorts(DeviceId deviceId) {
         retriedPortDiscoveryMap.put(deviceId, new AtomicInteger(0));
         AtomicInteger count = retriedPortDiscoveryMap.get(deviceId);
+        //TODO this does not enable port discovery if port changes.
         Device device = deviceService.getDevice(deviceId);
         if (device == null) {
-            log.debug("Can't reach device {}, not updating ports", deviceId);
+            log.debug("Cant' reach device {}, not updating ports", deviceId);
             return;
         }
-        if (forcePortUpdates || (deviceService.getPorts(deviceId).isEmpty()
-                && count != null && count.getAndIncrement() < maxRetries)) {
+        if (deviceService.getPorts(deviceId).isEmpty()
+                && count != null && count.getAndIncrement() < maxRetries) {
             if (device.is(DeviceDescriptionDiscovery.class)) {
                 providerService.updatePorts(deviceId,
                         device.as(DeviceDescriptionDiscovery.class).discoverPortDetails());
             } else {
-                log.warn("No DeviceDescription behaviour for device {}", deviceId);
+                log.warn("No DeviceDescirption behaviour for device {}", deviceId);
             }
 
         }

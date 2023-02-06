@@ -49,7 +49,6 @@ import org.onosproject.net.pi.model.PiMatchFieldId;
 import org.onosproject.net.pi.runtime.PiExactFieldMatch;
 import org.onosproject.net.pi.runtime.PiFieldMatch;
 import org.onosproject.net.pi.runtime.PiLpmFieldMatch;
-import org.onosproject.net.pi.runtime.PiOptionalFieldMatch;
 import org.onosproject.net.pi.runtime.PiRangeFieldMatch;
 import org.onosproject.net.pi.runtime.PiTernaryFieldMatch;
 
@@ -74,7 +73,6 @@ public class CriterionCodecTest {
     final MacAddress mcastMac = MacAddress.valueOf("01:00:5E:00:00:01");
     final MacAddress mcastMacMask = MacAddress.valueOf("FF:FF:FF:80:00:00");
     final TpPort tpPort = TpPort.tpPort(40000);
-    final TpPort tpPortMask = TpPort.tpPort(65472);
     final int tributaryPortNumber = 11;
     final int tributarySlotLen = 80;
     final byte[] tributarySlotBitmap = new byte[] {1, 2, 3, 4, 2, 3, 4, 2, 3, 4};
@@ -170,16 +168,6 @@ public class CriterionCodecTest {
     }
 
     /**
-     * Tests masked ethernet source criterion (Criterion.Type.ETH_SRC_MASKED).
-     */
-    @Test
-    public void matchEthSrcMaskTest() {
-        Criterion criterion = Criteria.matchEthSrcMasked(mcastMac, mcastMacMask);
-        ObjectNode result = criterionCodec.encode(criterion, context);
-        assertThat(result, matchesCriterion(criterion));
-    }
-
-    /**
      * Tests ethernet type criterion.
      */
     @Test
@@ -270,31 +258,11 @@ public class CriterionCodecTest {
     }
 
     /**
-     * Tests source TCP port masked criterion.
-     */
-    @Test
-    public void matchTcpSrcMaskedTest() {
-        Criterion criterion = Criteria.matchTcpSrcMasked(tpPort, tpPortMask);
-        ObjectNode result = criterionCodec.encode(criterion, context);
-        assertThat(result, matchesCriterion(criterion));
-    }
-
-    /**
      * Tests destination TCP port criterion.
      */
     @Test
     public void matchTcpDstTest() {
         Criterion criterion = Criteria.matchTcpDst(tpPort);
-        ObjectNode result = criterionCodec.encode(criterion, context);
-        assertThat(result, matchesCriterion(criterion));
-    }
-
-    /**
-     * Tests destination TCP port masked criterion.
-     */
-    @Test
-    public void matchTcpDstMaskedTest() {
-        Criterion criterion = Criteria.matchTcpDstMasked(tpPort, tpPortMask);
         ObjectNode result = criterionCodec.encode(criterion, context);
         assertThat(result, matchesCriterion(criterion));
     }
@@ -310,31 +278,11 @@ public class CriterionCodecTest {
     }
 
     /**
-     * Tests source UDP port masked criterion.
-     */
-    @Test
-    public void matchUdpSrcMaskedTest() {
-        Criterion criterion = Criteria.matchUdpSrcMasked(tpPort, tpPortMask);
-        ObjectNode result = criterionCodec.encode(criterion, context);
-        assertThat(result, matchesCriterion(criterion));
-    }
-
-    /**
      * Tests destination UDP criterion.
      */
     @Test
     public void matchUdpDstTest() {
         Criterion criterion = Criteria.matchUdpDst(tpPort);
-        ObjectNode result = criterionCodec.encode(criterion, context);
-        assertThat(result, matchesCriterion(criterion));
-    }
-
-    /**
-     * Tests destination UDP port masked criterion.
-     */
-    @Test
-    public void matchUdpDstMaskedTest() {
-        Criterion criterion = Criteria.matchUdpDstMasked(tpPort, tpPortMask);
         ObjectNode result = criterionCodec.encode(criterion, context);
         assertThat(result, matchesCriterion(criterion));
     }
@@ -350,31 +298,11 @@ public class CriterionCodecTest {
     }
 
     /**
-     * Tests source SCTP port masked criterion.
-     */
-    @Test
-    public void matchSctpSrcMaskedTest() {
-        Criterion criterion = Criteria.matchSctpSrcMasked(tpPort, tpPortMask);
-        ObjectNode result = criterionCodec.encode(criterion, context);
-        assertThat(result, matchesCriterion(criterion));
-    }
-
-    /**
      * Tests destination SCTP criterion.
      */
     @Test
     public void matchSctpDstTest() {
         Criterion criterion = Criteria.matchSctpDst(tpPort);
-        ObjectNode result = criterionCodec.encode(criterion, context);
-        assertThat(result, matchesCriterion(criterion));
-    }
-
-    /**
-     * Tests destination SCTP port masked criterion.
-     */
-    @Test
-    public void matchSctpDstMaskedTest() {
-        Criterion criterion = Criteria.matchSctpDstMasked(tpPort, tpPortMask);
         ObjectNode result = criterionCodec.encode(criterion, context);
         assertThat(result, matchesCriterion(criterion));
     }
@@ -591,12 +519,6 @@ public class CriterionCodecTest {
                 .matchRange(ipv4MatchFieldId, matchRangeBytes1, matchRangeHighBytes).build();
         ObjectNode rangeResult = criterionCodec.encode(rangeBytesCriterion, context);
         assertThat(rangeResult, matchesCriterion(rangeBytesCriterion));
-
-        byte[] matchOptionalBytes = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
-        Criterion optionalBytesCriterion = PiCriterion.builder().matchOptional(ethMatchFieldId,
-                                                                               matchOptionalBytes).build();
-        ObjectNode optionalResult = criterionCodec.encode(optionalBytesCriterion, context);
-        assertThat(optionalResult, matchesCriterion(optionalBytesCriterion));
     }
 
     /**
@@ -633,11 +555,6 @@ public class CriterionCodecTest {
                                       is(copyFrom((byte) 0x20)));
                     Assert.assertThat(((PiRangeFieldMatch) piFieldMatch).lowValue(),
                                       is(copyFrom((byte) 0x10)));
-                    break;
-                case OPTIONAL:
-                    Assert.assertThat(piFieldMatch.fieldId().id(), is("eth_dst"));
-                    Assert.assertThat(((PiOptionalFieldMatch) piFieldMatch).value(),
-                                      is(copyFrom(new byte[]{0x00, 0x11, 0x22, 0x33, 0x44, 0x55})));
                     break;
                 default:
                     Assert.fail();

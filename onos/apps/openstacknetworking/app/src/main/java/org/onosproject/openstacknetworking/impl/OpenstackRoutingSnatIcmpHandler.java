@@ -85,10 +85,9 @@ import static org.onosproject.openstacknetworking.api.Constants.GW_COMMON_TABLE;
 import static org.onosproject.openstacknetworking.api.Constants.OPENSTACK_NETWORKING_APP_ID;
 import static org.onosproject.openstacknetworking.api.Constants.PRIORITY_INTERNAL_ROUTING_RULE;
 import static org.onosproject.openstacknetworking.impl.OsgiPropertyConstants.USE_STATEFUL_SNAT;
-import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.externalGatewayIp;
+import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.externalIpFromSubnet;
 import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.externalPeerRouterFromSubnet;
 import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.getPropertyValueAsBoolean;
-import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.getRouterFromSubnet;
 import static org.onosproject.openstacknode.api.OpenstackNode.NodeType.GATEWAY;
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -348,17 +347,9 @@ public class OpenstackRoutingSnatIcmpHandler {
                 // this is a request to an external network
                 log.trace("Icmp request to external {} from {}", dstIp, srcIp);
 
-                Router osRouter = getRouterFromSubnet(srcSubnet, osRouterService);
-
-                if (osRouter == null || osRouter.getExternalGatewayInfo() == null) {
-                    // this router does not have external connectivity
-                    log.warn("No router is associated with the given subnet {}", srcSubnet);
-                    return false;
-                }
-
-                IpAddress externalGatewayIp = externalGatewayIp(osRouter, osNetworkService);
-
-                if (externalGatewayIp == null) {
+                IpAddress externalIp = externalIpFromSubnet(srcSubnet,
+                                            osRouterService, osNetworkService);
+                if (externalIp == null) {
                     log.warn(ERR_REQ + "failed to get external ip");
                     return false;
                 }
@@ -371,11 +362,12 @@ public class OpenstackRoutingSnatIcmpHandler {
                     return false;
                 }
 
-                String icmpInfoKey = icmpInfoKey(icmp, externalGatewayIp.toString(),
+                String icmpInfoKey = icmpInfoKey(icmp,
+                        externalIp.toString(),
                         IPv4.fromIPv4Address(ipPacket.getDestinationAddress()));
                 log.trace("Created icmpInfo key is {}", icmpInfoKey);
 
-                sendRequestForExternal(ipPacket, srcDevice, externalGatewayIp, externalPeerRouter);
+                sendRequestForExternal(ipPacket, srcDevice, externalIp, externalPeerRouter);
 
                 try {
                     icmpInfoMap.compute(icmpInfoKey, (id, existing) -> {

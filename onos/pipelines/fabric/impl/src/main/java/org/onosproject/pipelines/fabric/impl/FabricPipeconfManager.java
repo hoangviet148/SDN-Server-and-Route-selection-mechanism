@@ -51,7 +51,6 @@ public final class FabricPipeconfManager implements FabricPipeconfService {
     private static final String INT_PROFILE_SUFFIX = "-int";
     private static final String FULL_PROFILE_SUFFIX = "-full";
     private static final String BNG_PROFILE_SUFFIX = "-bng";
-    private static final String UPF_PROFILE_SUFFIX = "-spgw";
 
     private static Logger log = getLogger(FabricPipeconfLoader.class);
 

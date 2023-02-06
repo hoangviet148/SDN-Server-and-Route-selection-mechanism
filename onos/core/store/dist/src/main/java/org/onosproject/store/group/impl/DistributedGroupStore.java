@@ -23,7 +23,6 @@ import org.onlab.util.KryoNamespace;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.NodeId;
-import org.onosproject.core.ApplicationId;
 import org.onosproject.core.GroupId;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.DeviceId;
@@ -31,7 +30,9 @@ import org.onosproject.net.MastershipRole;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.driver.DriverService;
 import org.onosproject.net.group.DefaultGroup;
+import org.onosproject.net.group.DefaultGroupBucket;
 import org.onosproject.net.group.DefaultGroupDescription;
+import org.onosproject.net.group.DefaultGroupKey;
 import org.onosproject.net.group.Group;
 import org.onosproject.net.group.Group.GroupState;
 import org.onosproject.net.group.GroupBucket;
@@ -191,7 +192,14 @@ public class DistributedGroupStore
         KryoNamespace.Builder kryoBuilder = new KryoNamespace.Builder()
                 .register(KryoNamespaces.API)
                 .nextId(KryoNamespaces.BEGIN_USER_CUSTOM_ID)
-                .register(GroupStoreMessage.class,
+                .register(DefaultGroup.class,
+                          DefaultGroupBucket.class,
+                          DefaultGroupDescription.class,
+                          DefaultGroupKey.class,
+                          GroupDescription.Type.class,
+                          Group.GroupState.class,
+                          GroupBuckets.class,
+                          GroupStoreMessage.class,
                           GroupStoreMessage.Type.class,
                           UpdateType.class,
                           GroupStoreMessageSubjects.class,
@@ -444,13 +452,11 @@ public class DistributedGroupStore
      */
     @Override
     public void storeGroupDescription(GroupDescription groupDesc) {
-        log.debug("In storeGroupDescription id {} for dev {}",
-                groupDesc.givenGroupId() != null ? "0x" + Integer.toHexString(groupDesc.givenGroupId()) : "N/A",
-                groupDesc.deviceId());
+        log.debug("In storeGroupDescription");
         // Check if a group is existing with the same key
         Group existingGroup = getGroup(groupDesc.deviceId(), groupDesc.appCookie());
         if (existingGroup != null) {
-            log.debug("Group already exists with the same key {} in dev:{} with id:{}",
+            log.debug("Group already exists with the same key {} in dev:{} with id:0x{}",
                      groupDesc.appCookie(), groupDesc.deviceId(),
                      Integer.toHexString(existingGroup.id().id()));
             return;
@@ -462,9 +468,8 @@ public class DistributedGroupStore
                       groupDesc.deviceId());
             if (mastershipService.getMasterFor(groupDesc.deviceId()) == null) {
                 log.debug("No Master for device {}..."
-                                  + "Queuing Group id {} ADD request",
-                    groupDesc.deviceId(),
-                    groupDesc.givenGroupId() != null ? "0x" + Integer.toHexString(groupDesc.givenGroupId()) : "N/A");
+                                  + "Queuing Group ADD request",
+                          groupDesc.deviceId());
                 addToPendingAudit(groupDesc);
                 return;
             }
@@ -478,25 +483,22 @@ public class DistributedGroupStore
                                         mastershipService.getMasterFor(groupDesc.deviceId()))
                     .whenComplete((result, error) -> {
                         if (error != null) {
-                            log.warn("Failed to send request to master: id {} to {}",
-                                    groupDesc.givenGroupId() != null ?
-                                            "0x" + Integer.toHexString(groupDesc.givenGroupId()) : "N/A",
+                            log.warn("Failed to send request to master: {} to {}",
+                                     groupOp,
                                      mastershipService.getMasterFor(groupDesc.deviceId()));
                             //TODO: Send Group operation failure event
                         } else {
-                            log.debug("Sent Group operation id {} request for device {} "
+                            log.debug("Sent Group operation request for device {} "
                                               + "to remote MASTER {}",
-                                    groupDesc.givenGroupId() != null ?
-                                            "0x" + Integer.toHexString(groupDesc.givenGroupId()) : "N/A",
-                                    groupDesc.deviceId(), mastershipService.getMasterFor(groupDesc.deviceId()));
+                                      groupDesc.deviceId(),
+                                      mastershipService.getMasterFor(groupDesc.deviceId()));
                         }
                     });
             return;
         }
 
-        log.debug("Store group id {} for device {} is getting handled locally",
-                groupDesc.givenGroupId() != null ? "0x" + Integer.toHexString(groupDesc.givenGroupId()) : "N/A",
-                groupDesc.deviceId());
+        log.debug("Store group for device {} is getting handled locally",
+                  groupDesc.deviceId());
         storeGroupDescriptionInternal(groupDesc);
     }
 
@@ -546,24 +548,20 @@ public class DistributedGroupStore
             return;
         }
 
-        synchronized (deviceAuditStatus) {
-            if (deviceAuditStatus.get(groupDesc.deviceId()) == null) {
-                // Device group audit has not completed yet
-                // Add this group description to pending group key table
-                // Create a group entry object with Dummy Group ID
-                log.debug("storeGroupDescriptionInternal: Device {} AUDIT pending...Queuing Group id {} ADD request",
-                        groupDesc.deviceId(),
-                        groupDesc.givenGroupId() != null ?
-                                "0x" + Integer.toHexString(groupDesc.givenGroupId()) : "N/A");
-                StoredGroupEntry group = new DefaultGroup(dummyGroupId, groupDesc);
-                group.setState(GroupState.WAITING_AUDIT_COMPLETE);
-                Map<GroupStoreKeyMapKey, StoredGroupEntry> pendingKeyTable =
-                        getPendingGroupKeyTable();
-                pendingKeyTable.put(new GroupStoreKeyMapKey(groupDesc.deviceId(),
-                                groupDesc.appCookie()),
-                        group);
-                return;
-            }
+        if (deviceAuditStatus.get(groupDesc.deviceId()) == null) {
+            // Device group audit has not completed yet
+            // Add this group description to pending group key table
+            // Create a group entry object with Dummy Group ID
+            log.debug("storeGroupDescriptionInternal: Device {} AUDIT pending...Queuing Group ADD request",
+                      groupDesc.deviceId());
+            StoredGroupEntry group = new DefaultGroup(dummyGroupId, groupDesc);
+            group.setState(GroupState.WAITING_AUDIT_COMPLETE);
+            Map<GroupStoreKeyMapKey, StoredGroupEntry> pendingKeyTable =
+                    getPendingGroupKeyTable();
+            pendingKeyTable.put(new GroupStoreKeyMapKey(groupDesc.deviceId(),
+                                                        groupDesc.appCookie()),
+                                group);
+            return;
         }
 
         Group matchingExtraneousGroup = null;
@@ -713,8 +711,8 @@ public class DistributedGroupStore
                       deviceId);
             if (mastershipService.getMasterFor(deviceId) == null) {
                 log.error("No Master for device {}..."
-                                  + "Can not perform update group (appCookie {}) operation",
-                          deviceId, newAppCookie);
+                                  + "Can not perform update group operation",
+                          deviceId);
                 //TODO: Send Group operation failure event
                 return;
             }
@@ -731,14 +729,15 @@ public class DistributedGroupStore
                                         mastershipService.getMasterFor(deviceId)).whenComplete((result, error) -> {
                 if (error != null) {
                     log.warn("Failed to send request to master: {} to {}",
-                             groupOp, mastershipService.getMasterFor(deviceId), error);
+                             groupOp,
+                             mastershipService.getMasterFor(deviceId), error);
                 }
                 //TODO: Send Group operation failure event
             });
             return;
         }
-        log.debug("updateGroupDescription for device {} is getting handled locally (appCookie {})",
-                  deviceId, newAppCookie);
+        log.debug("updateGroupDescription for device {} is getting handled locally",
+                  deviceId);
         updateGroupDescriptionInternal(deviceId,
                                        oldAppCookie,
                                        type,
@@ -755,8 +754,7 @@ public class DistributedGroupStore
         Group oldGroup = getGroup(deviceId, oldAppCookie);
         if (oldGroup == null) {
             log.warn("updateGroupDescriptionInternal: Group not found...strange. "
-                             + "GroupKey:{} DeviceId:{} newGroupKey:{}",
-                    oldAppCookie, deviceId, newAppCookie);
+                             + "GroupKey:{} DeviceId:{}", oldAppCookie, deviceId);
             return;
         }
 
@@ -787,15 +785,15 @@ public class DistributedGroupStore
             //Update the group entry in groupkey based map.
             //Update to groupid based map will happen in the
             //groupkey based map update listener
-            log.debug("updateGroupDescriptionInternal with type {}: Group {} updated with buckets",
-                      type, newGroup.id());
+            log.debug("updateGroupDescriptionInternal with type {}: Group updated with buckets",
+                      type);
             getGroupStoreKeyMap().
                     put(new GroupStoreKeyMapKey(newGroup.deviceId(),
                                                 newGroup.appCookie()), newGroup);
             notifyDelegate(new GroupEvent(Type.GROUP_UPDATE_REQUESTED, newGroup));
         } else {
-            log.warn("updateGroupDescriptionInternal with type {}: Group {} No "
-                             + "change in the buckets in update", type, oldGroup.id());
+            log.warn("updateGroupDescriptionInternal with type {}: No "
+                             + "change in the buckets in update", type);
         }
     }
 
@@ -871,8 +869,8 @@ public class DistributedGroupStore
                       deviceId);
             if (mastershipService.getMasterFor(deviceId) == null) {
                 log.error("No Master for device {}..."
-                                  + "Can not perform delete group (appCookie {}) operation",
-                          deviceId, appCookie);
+                                  + "Can not perform delete group operation",
+                          deviceId);
                 //TODO: Send Group operation failure event
                 return;
             }
@@ -886,14 +884,15 @@ public class DistributedGroupStore
                                         mastershipService.getMasterFor(deviceId)).whenComplete((result, error) -> {
                 if (error != null) {
                     log.warn("Failed to send request to master: {} to {}",
-                             groupOp, mastershipService.getMasterFor(deviceId), error);
+                             groupOp,
+                             mastershipService.getMasterFor(deviceId), error);
                 }
                 //TODO: Send Group operation failure event
             });
             return;
         }
-        log.debug("deleteGroupDescription in device {} is getting handled locally (appCookie {})",
-                  deviceId, appCookie);
+        log.debug("deleteGroupDescription in device {} is getting handled locally",
+                  deviceId);
         deleteGroupDescriptionInternal(deviceId, appCookie);
     }
 
@@ -916,8 +915,8 @@ public class DistributedGroupStore
                     put(new GroupStoreKeyMapKey(existing.deviceId(), existing.appCookie()),
                         existing);
         }
-        log.debug("deleteGroupDescriptionInternal: in device {} issuing GROUP_REMOVE_REQUESTED for {}",
-                  deviceId, existing.id());
+        log.debug("deleteGroupDescriptionInternal: in device {} issuing GROUP_REMOVE_REQUESTED",
+                  deviceId);
         notifyDelegate(new GroupEvent(Type.GROUP_REMOVE_REQUESTED, existing));
     }
 
@@ -941,7 +940,7 @@ public class DistributedGroupStore
                         get()).setBytes(bucket.bytes());
             } else {
                 log.warn("updateGroupEntryStatsInternal: No matching bucket {}" +
-                        " to update stats for group {}", bucket, group.id());
+                        " to update stats", bucket);
             }
         }
         existing.setLife(group.life());
@@ -1100,47 +1099,11 @@ public class DistributedGroupStore
                 .forEach(entriesPendingRemove::add);
 
         purgeGroupEntries(entriesPendingRemove);
-
-        // it is unlikely to happen but better clear also the
-        // pending groups: device disconnected before we got
-        // the first stats and the apps were able to push groups.
-        entriesPendingRemove.clear();
-        getPendingGroupKeyTable().entrySet().stream()
-                .filter(entry -> entry.getKey().deviceId().equals(deviceId))
-                .forEach(entriesPendingRemove::add);
-
-        purgeGroupEntries(entriesPendingRemove);
-    }
-
-    @Override
-    public void purgeGroupEntries(DeviceId deviceId, ApplicationId appId) {
-        Set<Entry<GroupStoreKeyMapKey, StoredGroupEntry>> entriesPendingRemove =
-                new HashSet<>();
-
-        getGroupStoreKeyMap().entrySet().stream()
-                .filter(entry -> entry.getKey().deviceId().equals(deviceId) && entry.getValue().appId().equals(appId))
-                .forEach(entriesPendingRemove::add);
-
-        purgeGroupEntries(entriesPendingRemove);
-
-        // it is unlikely to happen but better clear also the
-        // pending groups: device disconnected before we got
-        // the first stats and the apps were able to push groups.
-        entriesPendingRemove.clear();
-        getPendingGroupKeyTable().entrySet().stream()
-                .filter(entry -> entry.getKey().deviceId().equals(deviceId) && entry.getValue().appId().equals(appId))
-                .forEach(entriesPendingRemove::add);
-
-        purgeGroupEntries(entriesPendingRemove);
     }
 
     @Override
     public void purgeGroupEntries() {
         purgeGroupEntries(getGroupStoreKeyMap().entrySet());
-        // it is unlikely to happen but better clear also the
-        // pending groups: device disconnected before we got
-        // the first stats and the apps were able to push groups.
-        purgeGroupEntries(getPendingGroupKeyTable().entrySet());
     }
 
     @Override
@@ -1152,26 +1115,15 @@ public class DistributedGroupStore
                           deviceId);
                 deviceAuditStatus.put(deviceId, true);
                 // Execute all pending group requests
-                List<StoredGroupEntry> pendingGroupRequests = getPendingGroupKeyTable().values()
-                        .stream()
-                        .filter(g -> g.deviceId().equals(deviceId))
-                        .collect(Collectors.toList());
-                if (log.isDebugEnabled()) {
-                    List<String> pendingIds = pendingGroupRequests.stream()
-                            .map(GroupDescription::givenGroupId)
-                            .map(id -> id != null ? "0x" + Integer.toHexString(id) : "N/A")
-                            .collect(Collectors.toList());
-                    log.debug("processing pending group add requests for device {}: {}",
-                            deviceId, pendingIds);
-                }
-                NodeId master;
+                List<StoredGroupEntry> pendingGroupRequests =
+                        getPendingGroupKeyTable().values()
+                                .stream()
+                                .filter(g -> g.deviceId().equals(deviceId))
+                                .collect(Collectors.toList());
+                log.debug("processing pending group add requests for device {} and number of pending requests {}",
+                          deviceId,
+                          pendingGroupRequests.size());
                 for (Group group : pendingGroupRequests) {
-                    // Mastership change can occur during this iteration
-                    if (!shouldHandle(deviceId)) {
-                        log.warn("Tried to process pending groups while the node was not the master" +
-                                " or the device {} was not available", deviceId);
-                        return;
-                    }
                     GroupDescription tmp = new DefaultGroupDescription(
                             group.deviceId(),
                             group.type(),
@@ -1259,7 +1211,7 @@ public class DistributedGroupStore
                 if (existing.state() == GroupState.PENDING_ADD
                     || existing.state() == GroupState.PENDING_ADD_RETRY) {
                     notifyDelegate(new GroupEvent(Type.GROUP_ADD_FAILED, existing));
-                    log.warn("groupOperationFailed: cleaning up "
+                    log.warn("groupOperationFailed: cleaningup "
                                      + "group {} from store in device {}....",
                              existing.id(),
                              existing.deviceId());
@@ -1383,8 +1335,7 @@ public class DistributedGroupStore
                   groupOp.type(),
                   groupOp.deviceId());
         if (!mastershipService.isLocalMaster(groupOp.deviceId())) {
-            log.warn("This node is not MASTER for device {} discard {}",
-                    groupOp.deviceId(), groupOp);
+            log.warn("This node is not MASTER for device {}", groupOp.deviceId());
             return;
         }
         if (groupOp.type() == GroupStoreMessage.Type.ADD) {
@@ -1501,11 +1452,6 @@ public class DistributedGroupStore
         }
     }
 
-    private boolean shouldHandle(DeviceId deviceId) {
-        NodeId master = mastershipService.getMasterFor(deviceId);
-        return Objects.equals(local, master) && deviceService.isAvailable(deviceId);
-    }
-
     @Override
     public void pushGroupMetrics(DeviceId deviceId,
                                  Collection<Group> groupEntries) {
@@ -1540,9 +1486,9 @@ public class DistributedGroupStore
         // update stats
         for (Iterator<Group> it2 = southboundGroupEntries.iterator(); it2.hasNext();) {
             // Mastership change can occur during this iteration
-            if (!shouldHandle(deviceId)) {
-                log.warn("Tried to update the group stats while the node was not the master" +
-                        " or the device {} was not available", deviceId);
+            master = mastershipService.getMasterFor(deviceId);
+            if (!Objects.equals(local, master)) {
+                log.warn("Tried to update the group stats while the node was not the master");
                 return;
             }
             Group group = it2.next();
@@ -1570,9 +1516,9 @@ public class DistributedGroupStore
                 }
             } else {
                 // Mastership change can occur during this iteration
-                if (!shouldHandle(deviceId)) {
-                    log.warn("Tried to process extraneous groups while the node was not the master" +
-                            " or the device {} was not available", deviceId);
+                master = mastershipService.getMasterFor(deviceId);
+                if (!Objects.equals(local, master)) {
+                    log.warn("Tried to process extraneous groups while the node was not the master");
                     return;
                 }
                 // there are groups in the switch that aren't in the store
@@ -1590,9 +1536,9 @@ public class DistributedGroupStore
         // missing groups in the dataplane
         for (StoredGroupEntry group : storedGroupEntries) {
             // Mastership change can occur during this iteration
-            if (!shouldHandle(deviceId)) {
-                log.warn("Tried to process missing groups while the node was not the master" +
-                        " or the device {} was not available", deviceId);
+            master = mastershipService.getMasterFor(deviceId);
+            if (!Objects.equals(local, master)) {
+                log.warn("Tried to process missing groups while the node was not the master");
                 return;
             }
             // there are groups in the store that aren't in the switch
@@ -1604,9 +1550,9 @@ public class DistributedGroupStore
         // extraneous groups in the store
         for (Group group : extraneousStoredEntries) {
             // Mastership change can occur during this iteration
-            if (!shouldHandle(deviceId)) {
-                log.warn("Tried to process node extraneous groups while the node was not the master" +
-                        " or the device {} was not available", deviceId);
+            master = mastershipService.getMasterFor(deviceId);
+            if (!Objects.equals(local, master)) {
+                log.warn("Tried to process node extraneous groups while the node was not the master");
                 return;
             }
             // there are groups in the extraneous store that

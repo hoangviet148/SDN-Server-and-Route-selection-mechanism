@@ -8,6 +8,8 @@
 /mininet/inference/packet-capture.log
 /mininet/**/*.pcap
 
+/onos/*
+
 /jupyter/work/.ipynb_checkpoints
 /jupyter/dataset/*
 

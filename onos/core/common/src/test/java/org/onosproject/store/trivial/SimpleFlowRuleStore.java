@@ -25,7 +25,6 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.SettableFuture;
 import org.onlab.util.Tools;
-import org.onosproject.core.ApplicationId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.flow.CompletedBatchOperation;
 import org.onosproject.net.flow.DefaultFlowEntry;
@@ -299,16 +298,6 @@ public class SimpleFlowRuleStore
     @Override
     public void purgeFlowRule(DeviceId deviceId) {
         flowEntries.remove(deviceId);
-    }
-
-    @Override
-    public boolean purgeFlowRules(DeviceId deviceId, ApplicationId appId) {
-        flowEntries.get(deviceId).values()
-                .removeIf(storedFlowEntries -> {
-                    storedFlowEntries.removeIf(storedFlowEntry -> storedFlowEntry.appId() == appId.id());
-                    return storedFlowEntries.isEmpty();
-                });
-        return true;
     }
 
     @Override

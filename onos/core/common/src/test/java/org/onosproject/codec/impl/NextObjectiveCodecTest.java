@@ -26,9 +26,7 @@ import org.onosproject.core.DefaultApplicationId;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.flowobjective.DefaultNextObjective;
-import org.onosproject.net.flowobjective.DefaultNextTreatment;
 import org.onosproject.net.flowobjective.NextObjective;
-import org.onosproject.net.flowobjective.NextTreatment;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -72,7 +70,6 @@ public class NextObjectiveCodecTest {
     public void testNextObjectiveEncode() {
 
         TrafficTreatment treatment = DefaultTrafficTreatment.builder().build();
-        NextTreatment nextTreatment = DefaultNextTreatment.of(treatment, 5);
 
         NextObjective nextObj = DefaultNextObjective.builder()
                 .makePermanent()
@@ -80,7 +77,7 @@ public class NextObjectiveCodecTest {
                 .fromApp(APP_ID)
                 .withPriority(60)
                 .withId(5)
-                .addTreatment(nextTreatment)
+                .addTreatment(treatment)
                 .add();
 
         ObjectNode nextObjJson = nextObjectiveCodec.encode(nextObj, context);

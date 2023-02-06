@@ -15,7 +15,6 @@
  */
 package org.onosproject.codec.impl;
 
-import com.esotericsoftware.kryo.io.Input;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.onlab.packet.Ip6Address;
@@ -34,27 +33,19 @@ import org.onosproject.net.OduSignalType;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.criteria.Criteria;
 import org.onosproject.net.flow.criteria.Criterion;
-import org.onosproject.net.flow.criteria.ExtensionCriterion;
 import org.onosproject.net.flow.criteria.PiCriterion;
 import org.onosproject.net.pi.model.PiMatchFieldId;
 import org.onosproject.net.pi.model.PiMatchType;
-import org.onosproject.store.serializers.KryoNamespaces;
-import org.slf4j.Logger;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.onlab.util.Tools.nullIsIllegal;
-import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Decode portion of the criterion codec.
  */
 public final class DecodeCriterionCodecHelper {
-
-    private static final Logger log = getLogger(DecodeCriterionCodecHelper.class);
 
     private final ObjectNode json;
 
@@ -82,7 +73,6 @@ public final class DecodeCriterionCodecHelper {
         decoderMap.put(Criterion.Type.ETH_DST.name(), new EthDstDecoder());
         decoderMap.put(Criterion.Type.ETH_DST_MASKED.name(), new EthDstMaskedDecoder());
         decoderMap.put(Criterion.Type.ETH_SRC.name(), new EthSrcDecoder());
-        decoderMap.put(Criterion.Type.ETH_SRC_MASKED.name(), new EthSrcMaskedDecoder());
         decoderMap.put(Criterion.Type.ETH_TYPE.name(), new EthTypeDecoder());
         decoderMap.put(Criterion.Type.VLAN_VID.name(), new VlanVidDecoder());
         decoderMap.put(Criterion.Type.VLAN_PCP.name(), new VlanPcpDecoder());
@@ -124,7 +114,6 @@ public final class DecodeCriterionCodecHelper {
         decoderMap.put(Criterion.Type.ODU_SIGID.name(), new OduSigIdDecoder());
         decoderMap.put(Criterion.Type.ODU_SIGTYPE.name(), new OduSigTypeDecoder());
         decoderMap.put(Criterion.Type.PROTOCOL_INDEPENDENT.name(), new PiDecoder());
-        decoderMap.put(Criterion.Type.EXTENSION.name(), new ExtensionDecoder());
     }
 
     private class EthTypeDecoder implements CriterionDecoder {
@@ -141,7 +130,6 @@ public final class DecodeCriterionCodecHelper {
             return Criteria.matchEthType(ethType);
         }
     }
-
     private class EthDstDecoder implements CriterionDecoder {
         @Override
         public Criterion decodeCriterion(ObjectNode json) {
@@ -151,18 +139,16 @@ public final class DecodeCriterionCodecHelper {
             return Criteria.matchEthDst(mac);
         }
     }
-
     private class EthDstMaskedDecoder implements CriterionDecoder {
         @Override
         public Criterion decodeCriterion(ObjectNode json) {
             MacAddress mac = MacAddress.valueOf(nullIsIllegal(json.get(CriterionCodec.MAC),
-                    CriterionCodec.MAC + MISSING_MEMBER_MESSAGE).asText());
+                                                              CriterionCodec.MAC + MISSING_MEMBER_MESSAGE).asText());
             MacAddress macMask = MacAddress.valueOf(nullIsIllegal(json.get(CriterionCodec.MAC_MASK),
-                    CriterionCodec.MAC_MASK + MISSING_MEMBER_MESSAGE).asText());
+                                                              CriterionCodec.MAC + MISSING_MEMBER_MESSAGE).asText());
             return Criteria.matchEthDstMasked(mac, macMask);
         }
     }
-
     private class EthSrcDecoder implements CriterionDecoder {
         @Override
         public Criterion decodeCriterion(ObjectNode json) {
@@ -170,17 +156,6 @@ public final class DecodeCriterionCodecHelper {
                     CriterionCodec.MAC + MISSING_MEMBER_MESSAGE).asText());
 
             return Criteria.matchEthSrc(mac);
-        }
-    }
-
-    private class EthSrcMaskedDecoder implements CriterionDecoder {
-        @Override
-        public Criterion decodeCriterion(ObjectNode json) {
-            MacAddress mac = MacAddress.valueOf(nullIsIllegal(json.get(CriterionCodec.MAC),
-                    CriterionCodec.MAC + MISSING_MEMBER_MESSAGE).asText());
-            MacAddress macMask = MacAddress.valueOf(nullIsIllegal(json.get(CriterionCodec.MAC_MASK),
-                    CriterionCodec.MAC_MASK + MISSING_MEMBER_MESSAGE).asText());
-            return Criteria.matchEthSrcMasked(mac, macMask);
         }
     }
 
@@ -678,18 +653,9 @@ public final class DecodeCriterionCodecHelper {
                                                                     CriterionCodec.PI_MATCH_LOW_VALUE +
                                                                             MISSING_MEMBER_MESSAGE).asText(), null),
                                     HexString.fromHexString(nullIsIllegal(node.get(CriterionCodec.PI_MATCH_HIGH_VALUE),
-                                                                     CriterionCodec.PI_MATCH_HIGH_VALUE +
-                                                                             MISSING_MEMBER_MESSAGE).asText(), null));
-                            break;
-                        case OPTIONAL:
-                            builder.matchOptional(
-                                    PiMatchFieldId.of(
-                                            nullIsIllegal(node.get(CriterionCodec.PI_MATCH_FIELD_ID),
-                                                          CriterionCodec.PI_MATCH_FIELD_ID +
-                                                                  MISSING_MEMBER_MESSAGE).asText()),
-                                    HexString.fromHexString(nullIsIllegal(node.get(CriterionCodec.PI_MATCH_VALUE),
-                                                                    CriterionCodec.PI_MATCH_VALUE +
-                                                                            MISSING_MEMBER_MESSAGE).asText(), null));
+                                                                    CriterionCodec.PI_MATCH_HIGH_VALUE +
+                                                                            MISSING_MEMBER_MESSAGE).asText(), null)
+                                    );
                             break;
                         default:
                             throw new IllegalArgumentException("Type " + type + " is unsupported");
@@ -700,24 +666,6 @@ public final class DecodeCriterionCodecHelper {
             }
 
             return builder.build();
-        }
-    }
-
-    private class ExtensionDecoder implements CriterionDecoder {
-        @Override
-        public Criterion decodeCriterion(ObjectNode json) {
-            try {
-                byte[] buffer = nullIsIllegal(json.get(CriterionCodec.EXTENSION),
-                        CriterionCodec.EXTENSION + MISSING_MEMBER_MESSAGE).binaryValue();
-                Input input = new Input(new ByteArrayInputStream(buffer));
-                ExtensionCriterion extensionCriterion =
-                        KryoNamespaces.API.borrow().readObject(input, ExtensionCriterion.class);
-                input.close();
-                return extensionCriterion;
-            } catch (IOException e) {
-                log.warn("Cannot convert the {} field into byte array", CriterionCodec.EXTENSION);
-                return null;
-            }
         }
     }
 

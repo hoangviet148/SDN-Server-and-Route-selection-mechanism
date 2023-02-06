@@ -420,22 +420,6 @@ public interface TrafficTreatment {
         Builder setArpSha(MacAddress addr);
 
         /**
-         * Sets the arp dst ip address.
-         *
-         * @param addr an ip
-         * @return a treatment builder
-         */
-        Builder setArpTpa(IpAddress addr);
-
-        /**
-         * Sets the arp dst mac address.
-         *
-         * @param addr a macaddress
-         * @return a treatment builder
-         */
-        Builder setArpTha(MacAddress addr);
-
-        /**
          * Sets the arp operation.
          *
          * @param op the value of arp operation.
@@ -478,14 +462,6 @@ public interface TrafficTreatment {
          */
         Builder statTrigger(Map<StatTriggerField, Long> statTriggerFieldMap,
                             StatTriggerFlag statTriggerFlag);
-
-        /**
-         * Adds a truncate instruction.
-         *
-         * @param maxLen the maximum frame length in bytes, must be a positive integer
-         * @return a treatment builder
-         */
-        Builder truncate(int maxLen);
 
         /**
          * Add all instructions from another treatment.

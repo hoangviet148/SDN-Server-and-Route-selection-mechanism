@@ -21,13 +21,10 @@ import org.onosproject.net.pi.model.PiActionParamModel;
 
 import java.util.Objects;
 
-import static com.google.common.base.MoreObjects.toStringHelper;
-
 /**
  * Implementation of PiActionParamModel for P4Runtime.
  */
 final class P4ActionParamModel implements PiActionParamModel {
-    static final int BIT_WIDTH_UNDEFINED = -1;
 
     private final PiActionParamId id;
     private final int bitWidth;
@@ -48,11 +45,6 @@ final class P4ActionParamModel implements PiActionParamModel {
     }
 
     @Override
-    public boolean hasBitWidth() {
-        return bitWidth != BIT_WIDTH_UNDEFINED;
-    }
-
-    @Override
     public int hashCode() {
         return Objects.hash(id, bitWidth);
     }
@@ -68,13 +60,5 @@ final class P4ActionParamModel implements PiActionParamModel {
         final P4ActionParamModel other = (P4ActionParamModel) obj;
         return Objects.equals(this.id, other.id)
                 && Objects.equals(this.bitWidth, other.bitWidth);
-    }
-
-    @Override
-    public String toString() {
-        return toStringHelper(this)
-                .add("id", id)
-                .add("bitWidth", bitWidth)
-                .toString();
     }
 }

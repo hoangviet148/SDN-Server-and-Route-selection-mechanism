@@ -19,7 +19,6 @@ import org.onlab.packet.ARP;
 import org.onlab.packet.Ethernet;
 import org.onlab.packet.Ip4Address;
 import org.onlab.packet.IpPrefix;
-import org.onlab.packet.MacAddress;
 import org.onlab.packet.TpPort;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.LeadershipService;
@@ -33,13 +32,10 @@ import org.onosproject.k8snetworking.api.K8sNetworkListener;
 import org.onosproject.k8snetworking.api.K8sNetworkService;
 import org.onosproject.k8snetworking.api.K8sPort;
 import org.onosproject.k8snetworking.util.RulePopulatorUtil;
-import org.onosproject.k8snode.api.K8sHost;
-import org.onosproject.k8snode.api.K8sHostService;
 import org.onosproject.k8snode.api.K8sNode;
 import org.onosproject.k8snode.api.K8sNodeEvent;
 import org.onosproject.k8snode.api.K8sNodeListener;
 import org.onosproject.k8snode.api.K8sNodeService;
-import org.onosproject.k8snode.api.K8sRouterBridge;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
@@ -68,16 +64,12 @@ import static org.onosproject.k8snetworking.api.Constants.EXT_ENTRY_TABLE;
 import static org.onosproject.k8snetworking.api.Constants.K8S_NETWORKING_APP_ID;
 import static org.onosproject.k8snetworking.api.Constants.POD_RESOLUTION_TABLE;
 import static org.onosproject.k8snetworking.api.Constants.PRIORITY_EXTERNAL_ROUTING_RULE;
-import static org.onosproject.k8snetworking.api.Constants.PRIORITY_ROUTER_RULE;
 import static org.onosproject.k8snetworking.api.Constants.PRIORITY_STATEFUL_SNAT_RULE;
-import static org.onosproject.k8snetworking.api.Constants.ROUTER_ENTRY_TABLE;
 import static org.onosproject.k8snetworking.api.Constants.ROUTING_TABLE;
 import static org.onosproject.k8snetworking.util.RulePopulatorUtil.CT_NAT_SRC_FLAG;
 import static org.onosproject.k8snetworking.util.RulePopulatorUtil.buildMoveArpShaToThaExtension;
 import static org.onosproject.k8snetworking.util.RulePopulatorUtil.buildMoveArpSpaToTpaExtension;
 import static org.onosproject.k8snetworking.util.RulePopulatorUtil.buildMoveEthSrcToDstExtension;
-import static org.onosproject.k8snode.api.Constants.DEFAULT_EXTERNAL_GATEWAY_MAC;
-import static org.onosproject.k8snode.api.K8sApiConfig.Mode.PASSTHROUGH;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -119,9 +111,6 @@ public class K8sRoutingSnatHandler {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected K8sNodeService k8sNodeService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected K8sHostService k8sHostService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected K8sFlowRuleService k8sFlowRuleService;
@@ -210,8 +199,8 @@ public class K8sRoutingSnatHandler {
                 install);
     }
 
-    private void setExtSnatDownstreamRule(K8sNode k8sNode,
-                                          boolean install) {
+    private void setSnatDownstreamRule(K8sNode k8sNode,
+                                       boolean install) {
         DeviceId deviceId = k8sNode.extBridge();
 
         TrafficSelector.Builder sBuilder = DefaultTrafficSelector.builder()
@@ -240,8 +229,8 @@ public class K8sRoutingSnatHandler {
                 install);
     }
 
-    private void setExtSnatUpstreamRule(K8sNode k8sNode,
-                                        boolean install) {
+    private void setSnatUpstreamRule(K8sNode k8sNode,
+                                     boolean install) {
 
         K8sNetwork net = k8sNetworkService.network(k8sNode.hostname());
 
@@ -270,18 +259,8 @@ public class K8sRoutingSnatHandler {
 
             tBuilder.extension(natTreatment, k8sNode.extBridge())
                     .setEthSrc(k8sNode.extBridgeMac())
-                    .setEthDst(k8sNode.extGatewayMac());
-
-            if (k8sNode.mode() == PASSTHROUGH) {
-                tBuilder.setOutput(k8sNode.extToRouterPortNum());
-            } else {
-                if (MacAddress.valueOf(DEFAULT_EXTERNAL_GATEWAY_MAC).equals(
-                        k8sNode.extGatewayMac())) {
-                    tBuilder.setOutput(k8sNode.extIntfPortNum());
-                } else {
-                    tBuilder.setOutput(k8sNode.extBridgePortNum());
-                }
-            }
+                    .setEthDst(k8sNode.extGatewayMac())
+                    .setOutput(k8sNode.extBridgePortNum());
         }
 
         k8sFlowRuleService.setRule(
@@ -308,9 +287,8 @@ public class K8sRoutingSnatHandler {
                     .extension(buildMoveEthSrcToDstExtension(device), device.id())
                     .extension(buildMoveArpShaToThaExtension(device), device.id())
                     .extension(buildMoveArpSpaToTpaExtension(device), device.id())
-                    .setEthSrc(k8sNode.extBridgeMac())
-                    .setArpSha(k8sNode.extBridgeMac())
                     .setArpSpa(Ip4Address.valueOf(k8sNode.extBridgeIp().toString()))
+                    .setArpSha(k8sNode.extBridgeMac())
                     .setOutput(PortNumber.IN_PORT)
                     .build();
 
@@ -323,102 +301,6 @@ public class K8sRoutingSnatHandler {
                     EXT_ENTRY_TABLE,
                     install);
         });
-    }
-
-    private void setRouterSnatUpstreamRule(K8sNode k8sNode,
-                                           K8sRouterBridge bridge,
-                                           boolean install) {
-        if (k8sNode.routerPortNum() == null) {
-            return;
-        }
-
-        TrafficSelector ipSelector = DefaultTrafficSelector.builder()
-                .matchEthType(Ethernet.TYPE_IPV4)
-                .matchInPort(k8sNode.routerToExtPortNum())
-                .build();
-
-        TrafficTreatment treatment = DefaultTrafficTreatment.builder()
-                .setOutput(k8sNode.routerPortNum())
-                .build();
-
-        k8sFlowRuleService.setRule(
-                appId,
-                bridge.deviceId(),
-                ipSelector,
-                treatment,
-                PRIORITY_ROUTER_RULE,
-                ROUTER_ENTRY_TABLE,
-                install);
-
-        TrafficSelector arpSelector = DefaultTrafficSelector.builder()
-                .matchEthType(Ethernet.TYPE_ARP)
-                .matchInPort(k8sNode.routerToExtPortNum())
-                .build();
-
-        k8sFlowRuleService.setRule(
-                appId,
-                bridge.deviceId(),
-                arpSelector,
-                treatment,
-                PRIORITY_ROUTER_RULE,
-                ROUTER_ENTRY_TABLE,
-                install);
-    }
-
-    private void setRouterSnatDownstreamRule(K8sNode k8sNode,
-                                             K8sRouterBridge bridge,
-                                             boolean install) {
-        if (k8sNode.routerPortNum() == null) {
-            return;
-        }
-
-        TrafficSelector ipSelector = DefaultTrafficSelector.builder()
-                .matchEthType(Ethernet.TYPE_IPV4)
-                .matchInPort(k8sNode.routerPortNum())
-                .matchIPDst(IpPrefix.valueOf(k8sNode.extBridgeIp(), 32))
-                .build();
-
-        TrafficTreatment treatment = DefaultTrafficTreatment.builder()
-                .setOutput(k8sNode.routerToExtPortNum())
-                .build();
-
-        k8sFlowRuleService.setRule(
-                appId,
-                bridge.deviceId(),
-                ipSelector,
-                treatment,
-                PRIORITY_ROUTER_RULE,
-                ROUTER_ENTRY_TABLE,
-                install);
-
-        TrafficSelector arpSelector = DefaultTrafficSelector.builder()
-                .matchEthType(Ethernet.TYPE_ARP)
-                .matchInPort(k8sNode.routerPortNum())
-                .matchArpTpa(Ip4Address.valueOf(k8sNode.extBridgeIp().toString()))
-                .build();
-
-        k8sFlowRuleService.setRule(
-                appId,
-                bridge.deviceId(),
-                arpSelector,
-                treatment,
-                PRIORITY_ROUTER_RULE,
-                ROUTER_ENTRY_TABLE,
-                install);
-    }
-
-    private void setRouterSnatRules(K8sNode k8sNode, boolean install) {
-        for (K8sHost host : k8sHostService.completeHosts()) {
-            if (host.nodeNames().contains(k8sNode.hostname())) {
-                K8sRouterBridge bridge = host.routerBridges().stream()
-                        .filter(b -> b.segmentId() == k8sNode.segmentId())
-                        .findAny().orElse(null);
-                if (bridge != null) {
-                    setRouterSnatUpstreamRule(k8sNode, bridge, install);
-                    setRouterSnatDownstreamRule(k8sNode, bridge, install);
-                }
-            }
-        }
     }
 
     private class InternalK8sNodeListener implements K8sNodeListener {
@@ -436,9 +318,6 @@ public class K8sRoutingSnatHandler {
                 case K8S_NODE_UPDATED:
                     eventExecutor.execute(() -> processNodeUpdate(event.subject()));
                     break;
-                case K8S_NODE_OFF_BOARDED:
-                    eventExecutor.execute(() -> processNodeOffboard(event.subject()));
-                    break;
                 case K8S_NODE_INCOMPLETE:
                 default:
                     break;
@@ -451,25 +330,13 @@ public class K8sRoutingSnatHandler {
             }
 
             setExtIntfArpRule(k8sNode, true);
-            setExtSnatDownstreamRule(k8sNode, true);
+            setSnatDownstreamRule(k8sNode, true);
             setContainerToExtRule(k8sNode, true);
-            setRouterSnatRules(k8sNode, true);
-        }
-
-        private void processNodeOffboard(K8sNode k8sNode) {
-            if (!isRelevantHelper()) {
-                return;
-            }
-
-            setExtIntfArpRule(k8sNode, false);
-            setExtSnatDownstreamRule(k8sNode, false);
-            setContainerToExtRule(k8sNode, false);
-            setRouterSnatRules(k8sNode, false);
         }
 
         private void processNodeUpdate(K8sNode k8sNode) {
             if (k8sNode.extGatewayMac() != null) {
-                setExtSnatUpstreamRule(k8sNode, true);
+                setSnatUpstreamRule(k8sNode, true);
             }
         }
     }

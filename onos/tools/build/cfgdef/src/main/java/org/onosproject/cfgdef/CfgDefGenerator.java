@@ -15,7 +15,6 @@
  */
 package org.onosproject.cfgdef;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.thoughtworks.qdox.JavaProjectBuilder;
 import com.thoughtworks.qdox.model.JavaAnnotation;
@@ -56,7 +55,6 @@ public class CfgDefGenerator {
     private final JavaProjectBuilder builder;
 
     private final Map<String, String> constants = Maps.newHashMap();
-    private final Map<JavaClass, List<String>> pendingProperties = Maps.newHashMap();
 
     public static void main(String[] args) throws IOException {
         if (args.length < 2) {
@@ -116,29 +114,7 @@ public class CfgDefGenerator {
             }
 
             if (!lines.isEmpty()) {
-                // FIXME this might not work if we have multiple inheritance stages
-                for (JavaClass derivedClass : javaClass.getDerivedClasses()) {
-                    // Temporary appends the properties - jar stream cannot be opened multiple times
-                    pendingProperties.compute(derivedClass, (k, v) -> {
-                        if (v == null) {
-                            v = Lists.newArrayList();
-                        }
-                        v.addAll(lines);
-                        return v;
-                    });
-                }
-                // Get the attributes stored by the super class
-                List<String> superProperties = pendingProperties.remove(javaClass);
-                if (superProperties != null && !superProperties.isEmpty()) {
-                    lines.addAll(superProperties);
-                }
                 writeCatalog(jar, javaClass, lines);
-            } else {
-                // Get the attributes stored by the super class
-                List<String> superProperties = pendingProperties.remove(javaClass);
-                if (superProperties != null && !superProperties.isEmpty()) {
-                    writeCatalog(jar, javaClass, superProperties);
-                }
             }
         }
     }
@@ -175,8 +151,7 @@ public class CfgDefGenerator {
             String comment = field.getComment();
             return comment != null ? comment : NO_DESCRIPTION;
         }
-        throw new IllegalStateException("cfgdef could not find a variable named " + name + " in "
-                + javaClass.getName());
+        throw new IllegalStateException("cfgdef could not find a variable named " + name + " in " + javaClass.getName());
     }
 
     private String elaborate(AnnotationValue value) {

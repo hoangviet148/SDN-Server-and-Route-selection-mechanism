@@ -47,7 +47,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Strings.isNullOrEmpty;
 
 /**
  * Atomix cluster store.
@@ -58,8 +57,6 @@ public class AtomixClusterStore extends AbstractStore<ClusterEvent, ClusterStore
 
     private static final String STATE_KEY = "state";
     private static final String VERSION_KEY = "version";
-    private static final String TYPE_KEY = "type";
-    private static final String TYPE_ONOS = "onos";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -103,14 +100,13 @@ public class AtomixClusterStore extends AbstractStore<ClusterEvent, ClusterStore
 
     private void changeMembership(ClusterMembershipEvent event) {
         ControllerNode node = nodes.get(NodeId.nodeId(event.subject().id().id()));
-        log.debug("Received a membership event {}", event);
         switch (event.type()) {
             case MEMBER_ADDED:
             case METADATA_CHANGED:
                 if (node == null) {
                     node = toControllerNode(event.subject());
                     nodes.put(node.id(), node);
-                    notifyDelegate(clusterEvent(ClusterEvent.Type.INSTANCE_ADDED, event.subject(), node));
+                    notifyDelegate(new ClusterEvent(ClusterEvent.Type.INSTANCE_ADDED, node));
                 }
                 updateVersion(node, event.subject());
                 updateState(node, event.subject());
@@ -118,8 +114,8 @@ public class AtomixClusterStore extends AbstractStore<ClusterEvent, ClusterStore
             case MEMBER_REMOVED:
                 if (node != null
                     && states.put(node.id(), ControllerNode.State.INACTIVE) != ControllerNode.State.INACTIVE) {
-                    notifyDelegate(clusterEvent(ClusterEvent.Type.INSTANCE_DEACTIVATED, event.subject(), node));
-                    notifyDelegate(clusterEvent(ClusterEvent.Type.INSTANCE_REMOVED, event.subject(), node));
+                    notifyDelegate(new ClusterEvent(ClusterEvent.Type.INSTANCE_DEACTIVATED, node));
+                    notifyDelegate(new ClusterEvent(ClusterEvent.Type.INSTANCE_REMOVED, node));
                 }
                 break;
             default:
@@ -133,13 +129,13 @@ public class AtomixClusterStore extends AbstractStore<ClusterEvent, ClusterStore
             if (states.put(node.id(), ControllerNode.State.ACTIVE) != ControllerNode.State.ACTIVE) {
                 log.info("Updated node {} state to {}", node.id(), ControllerNode.State.ACTIVE);
                 markUpdated(node.id());
-                notifyDelegate(clusterEvent(ClusterEvent.Type.INSTANCE_ACTIVATED, member, node));
+                notifyDelegate(new ClusterEvent(ClusterEvent.Type.INSTANCE_ACTIVATED, node));
             }
         } else {
             if (states.put(node.id(), ControllerNode.State.READY) != ControllerNode.State.READY) {
                 log.info("Updated node {} state to {}", node.id(), ControllerNode.State.READY);
                 markUpdated(node.id());
-                notifyDelegate(clusterEvent(ClusterEvent.Type.INSTANCE_READY, member, node));
+                notifyDelegate(new ClusterEvent(ClusterEvent.Type.INSTANCE_READY, node));
             }
         }
     }
@@ -174,7 +170,7 @@ public class AtomixClusterStore extends AbstractStore<ClusterEvent, ClusterStore
     public Set<Node> getStorageNodes() {
         return membershipService.getMembers()
             .stream()
-            .filter(member -> !Objects.equals(member.properties().getProperty(TYPE_KEY), TYPE_ONOS))
+            .filter(member -> !Objects.equals(member.properties().getProperty("type"), "onos"))
             .map(this::toControllerNode)
             .collect(Collectors.toSet());
     }
@@ -183,7 +179,7 @@ public class AtomixClusterStore extends AbstractStore<ClusterEvent, ClusterStore
     public Set<ControllerNode> getNodes() {
         return membershipService.getMembers()
             .stream()
-            .filter(member -> Objects.equals(member.properties().getProperty(TYPE_KEY), TYPE_ONOS))
+            .filter(member -> Objects.equals(member.properties().getProperty("type"), "onos"))
             .map(this::toControllerNode)
             .collect(Collectors.toSet());
     }
@@ -225,9 +221,8 @@ public class AtomixClusterStore extends AbstractStore<ClusterEvent, ClusterStore
         nodes.put(node.id(), node);
         ControllerNode.State state = node.equals(localNode)
             ? ControllerNode.State.ACTIVE : ControllerNode.State.INACTIVE;
-        Member member = membershipService.getMember(node.id().id());
-        member.properties().setProperty(STATE_KEY, state.name());
-        notifyDelegate(clusterEvent(ClusterEvent.Type.INSTANCE_ADDED, member, node));
+        membershipService.getMember(node.id().id()).properties().setProperty(STATE_KEY, state.name());
+        notifyDelegate(new ClusterEvent(ClusterEvent.Type.INSTANCE_ADDED, node));
         return node;
     }
 
@@ -237,20 +232,7 @@ public class AtomixClusterStore extends AbstractStore<ClusterEvent, ClusterStore
         ControllerNode node = nodes.remove(nodeId);
         if (node != null) {
             states.remove(nodeId);
-            notifyDelegate(clusterEvent(ClusterEvent.Type.INSTANCE_REMOVED,
-                    membershipService.getMember(node.id().id()), node));
+            notifyDelegate(new ClusterEvent(ClusterEvent.Type.INSTANCE_REMOVED, node));
         }
-    }
-
-    private ClusterEvent clusterEvent(ClusterEvent.Type type, Member member, ControllerNode node) {
-        // Atomix nodes do not set the property TYPE. Nowadays, the internal else is not used.
-        if (member != null && !isNullOrEmpty(member.properties().getProperty(TYPE_KEY))) {
-            if (Objects.equals(member.properties().getProperty(TYPE_KEY), TYPE_ONOS)) {
-                return new ClusterEvent(type, node, ClusterEvent.InstanceType.ONOS);
-            } else {
-                return new ClusterEvent(type, node, ClusterEvent.InstanceType.STORAGE);
-            }
-        }
-        return new ClusterEvent(type, node, ClusterEvent.InstanceType.STORAGE);
     }
 }

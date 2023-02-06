@@ -53,7 +53,6 @@ import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.onlab.util.Tools.groupedThreads;
-import static org.onosproject.net.MastershipRole.NONE;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -111,7 +110,7 @@ public class OvsdbDeviceProvider extends AbstractProvider
 
     @Override
     public void triggerProbe(DeviceId deviceId) {
-        log.debug("Triggering probe on device {}", deviceId);
+        log.info("Triggering probe on device {}", deviceId);
         if (!isReachable(deviceId)) {
             log.error("Failed to probe device {}", deviceId);
             providerService.deviceDisconnected(deviceId);
@@ -122,12 +121,7 @@ public class OvsdbDeviceProvider extends AbstractProvider
 
     @Override
     public void roleChanged(DeviceId deviceId, MastershipRole newRole) {
-        // for OVSDB there is no Mastership concept, simulating here a fake
-        // Mastership handshake to be compliant with the ONOS core
-        if (newRole != null && newRole != NONE) {
-            final MastershipRole role = mastershipService.getLocalRole(deviceId);
-            providerService.receivedRoleReply(deviceId, role, role);
-        }
+        // TODO: This will be implemented later.
     }
 
     @Override
@@ -155,6 +149,7 @@ public class OvsdbDeviceProvider extends AbstractProvider
                                                                                cid,
                                                                                annotations);
             providerService.deviceConnected(deviceId, deviceDescription);
+
         }
 
         @Override

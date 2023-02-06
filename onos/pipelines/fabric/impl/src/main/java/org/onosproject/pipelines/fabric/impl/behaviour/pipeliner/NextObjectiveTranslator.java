@@ -17,7 +17,6 @@
 package org.onosproject.pipelines.fabric.impl.behaviour.pipeliner;
 
 import com.google.common.collect.Lists;
-import org.onlab.packet.MplsLabel;
 import org.onlab.packet.VlanId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
@@ -29,7 +28,6 @@ import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.PiCriterion;
 import org.onosproject.net.flow.criteria.VlanIdCriterion;
 import org.onosproject.net.flow.instructions.Instruction;
-import org.onosproject.net.flow.instructions.L2ModificationInstruction.ModMplsLabelInstruction;
 import org.onosproject.net.flow.instructions.L2ModificationInstruction.ModVlanIdInstruction;
 import org.onosproject.net.flowobjective.DefaultNextTreatment;
 import org.onosproject.net.flowobjective.NextObjective;
@@ -49,18 +47,16 @@ import org.onosproject.net.pi.runtime.PiActionParam;
 import org.onosproject.net.pi.runtime.PiActionProfileGroupId;
 import org.onosproject.net.pi.runtime.PiGroupKey;
 import org.onosproject.pipelines.fabric.impl.behaviour.FabricCapabilities;
-import org.onosproject.pipelines.fabric.FabricConstants;
+import org.onosproject.pipelines.fabric.impl.behaviour.FabricConstants;
 import org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
-import static org.onosproject.net.flow.instructions.L2ModificationInstruction.L2SubType.MPLS_LABEL;
 import static org.onosproject.net.flow.instructions.L2ModificationInstruction.L2SubType.VLAN_ID;
 import static org.onosproject.net.flow.instructions.L2ModificationInstruction.L2SubType.VLAN_POP;
 import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.criterion;
@@ -107,53 +103,11 @@ class NextObjectiveTranslator
         }
 
         if (!isGroupModifyOp(obj)) {
-            // Generate next MPLS and VLAN rules.
-            nextMpls(obj, resultBuilder);
+            // Generate next VLAN rules.
             nextVlan(obj, resultBuilder);
         }
 
         return resultBuilder.build();
-    }
-
-    private void nextMpls(NextObjective obj,
-                          ObjectiveTranslation.Builder resultBuilder)
-            throws FabricPipelinerException {
-        // Next objective can contain only one mpls push and one mpls label
-        // instruction. Pipeliner does not support other configurations.
-
-        final List<List<ModMplsLabelInstruction>> mplsInstructions = defaultNextTreatments(
-                obj.nextTreatments(), false).stream()
-                .map(defaultNextTreatment -> l2Instructions(defaultNextTreatment.treatment(), MPLS_LABEL)
-                        .stream().map(v -> (ModMplsLabelInstruction) v)
-                        .collect(Collectors.toList()))
-                .filter(l -> !l.isEmpty())
-                .collect(Collectors.toList());
-
-        if (mplsInstructions.isEmpty()) {
-            // No need to apply next mpls table
-            return;
-        }
-
-        // We expect one mpls label for each treatment and the label has to be the same
-        final Set<MplsLabel> mplsLabels = mplsInstructions.stream()
-                .flatMap(Collection::stream)
-                .map(ModMplsLabelInstruction::label)
-                .collect(Collectors.toSet());
-        if (obj.nextTreatments().size() != mplsInstructions.size() ||
-                mplsLabels.size() != 1) {
-            throw new FabricPipelinerException(
-                    "Inconsistent MPLS_LABEL instructions, cannot process " +
-                            "next_mpls rule. It is required that all " +
-                            "treatments have the same MPLS_LABEL instructions.");
-        }
-        final TrafficSelector selector = nextIdSelector(obj.id());
-        final TrafficTreatment treatment = DefaultTrafficTreatment.builder()
-                .setMpls(mplsLabels.iterator().next())
-                .build();
-
-        resultBuilder.addFlowRule(flowRule(
-                obj, FabricConstants.FABRIC_INGRESS_PRE_NEXT_NEXT_MPLS,
-                selector, treatment));
     }
 
     private void nextVlan(NextObjective obj,
@@ -215,7 +169,7 @@ class NextObjectiveTranslator
         final TrafficTreatment treatment = treatmentBuilder.build();
 
         resultBuilder.addFlowRule(flowRule(
-                obj, FabricConstants.FABRIC_INGRESS_PRE_NEXT_NEXT_VLAN,
+                obj, FabricConstants.FABRIC_INGRESS_NEXT_NEXT_VLAN,
                 selector, treatment));
     }
 
@@ -245,7 +199,7 @@ class NextObjectiveTranslator
                 obj.nextTreatments(), true);
 
         if (forceSimple && treatments.size() > 1) {
-            log.warn("Forcing SIMPLE behavior for NextObjective with {} treatments {}",
+            log.warn("Forcing SIMPLE behavior for NextObjective with {} treatments []",
                      treatments.size(), obj);
         }
 
@@ -269,20 +223,10 @@ class NextObjectiveTranslator
             return;
         }
 
-        // Updated result builder with hashed group or indirect group
-        // use indirect group allow us to optimize the resource in those
-        // devices that preallocate memory based on the maxGroupSize
-        final int groupId;
-        if (obj.type() == NextObjective.Type.HASHED) {
-            groupId = selectGroup(obj, resultBuilder);
-        } else if (obj.type() == NextObjective.Type.SIMPLE) {
-            groupId = indirectGroup(obj, resultBuilder);
-        } else {
-            throw new FabricPipelinerException("Cannot translate BROADCAST next objective" +
-                    "into hashedNext actions");
-        }
+        // Updated result builder with hashed group.
+        final int groupId = selectGroup(obj, resultBuilder);
 
-        if (isGroupModifyOp(obj) || obj.op() == Objective.Operation.VERIFY) {
+        if (isGroupModifyOp(obj)) {
             // No changes to flow rules.
             return;
         }
@@ -303,30 +247,35 @@ class NextObjectiveTranslator
             throws FabricPipelinerException {
         final PortNumber outPort = outputPort(treatment);
         final Instruction popVlanInst = l2Instruction(treatment, VLAN_POP);
-        if (outPort != null) {
+        if (popVlanInst != null && outPort != null) {
             if (strict && treatment.allInstructions().size() > 2) {
                 throw new FabricPipelinerException(
                         "Treatment contains instructions other " +
                                 "than OUTPUT and VLAN_POP, cannot generate " +
                                 "egress rules");
             }
-            // We cannot program if there are no proper metadata in the objective
-            if (obj.meta() != null && obj.meta().getCriterion(Criterion.Type.VLAN_VID) != null) {
-                egressVlan(outPort, obj, popVlanInst, resultBuilder);
-            } else {
-                log.debug("NextObjective {} is trying to program {} without {} information",
-                        obj, FabricConstants.FABRIC_EGRESS_EGRESS_NEXT_EGRESS_VLAN,
-                        obj.meta() == null ? "metadata" : "vlanId");
-            }
+            egressVlanPop(outPort, obj, resultBuilder);
         }
     }
 
-    private void egressVlan(PortNumber outPort, NextObjective obj, Instruction popVlanInst,
-                            ObjectiveTranslation.Builder resultBuilder)
+    private void egressVlanPop(PortNumber outPort, NextObjective obj,
+                               ObjectiveTranslation.Builder resultBuilder)
             throws FabricPipelinerException {
+
+        if (obj.meta() == null) {
+            throw new FabricPipelinerException(
+                    "Cannot process egress pop VLAN rule, NextObjective has null meta",
+                    ObjectiveError.BADPARAMS);
+        }
 
         final VlanIdCriterion vlanIdCriterion = (VlanIdCriterion) criterion(
                 obj.meta(), Criterion.Type.VLAN_VID);
+        if (vlanIdCriterion == null) {
+            throw new FabricPipelinerException(
+                    "Cannot process egress pop VLAN rule, missing VLAN_VID criterion " +
+                            "in NextObjective meta",
+                    ObjectiveError.BADPARAMS);
+        }
 
         final PiCriterion egressVlanTableMatch = PiCriterion.builder()
                 .matchExact(FabricConstants.HDR_EG_PORT, outPort.toLong())
@@ -335,16 +284,13 @@ class NextObjectiveTranslator
                 .matchPi(egressVlanTableMatch)
                 .matchVlanId(vlanIdCriterion.vlanId())
                 .build();
-        final TrafficTreatment.Builder treatmentBuilder = DefaultTrafficTreatment.builder();
-        if (popVlanInst == null) {
-            treatmentBuilder.pushVlan();
-        } else {
-            treatmentBuilder.popVlan();
-        }
+        final TrafficTreatment treatment = DefaultTrafficTreatment.builder()
+                .popVlan()
+                .build();
 
         resultBuilder.addFlowRule(flowRule(
                 obj, FabricConstants.FABRIC_EGRESS_EGRESS_NEXT_EGRESS_VLAN,
-                selector, treatmentBuilder.build()));
+                selector, treatment));
     }
 
     private TrafficSelector nextIdSelector(int nextId) {
@@ -450,7 +396,10 @@ class NextObjectiveTranslator
                 .collect(Collectors.toList());
 
         final int groupId = obj.id();
-        final PiGroupKey groupKey = (PiGroupKey) getGroupKey(obj);
+        final PiGroupKey groupKey = new PiGroupKey(
+                hashedTableId,
+                FabricConstants.FABRIC_INGRESS_NEXT_HASHED_SELECTOR,
+                groupId);
 
         resultBuilder.addGroup(new DefaultGroupDescription(
                 deviceId,
@@ -502,7 +451,8 @@ class NextObjectiveTranslator
         final int groupId = obj.id();
         // Use DefaultGroupKey instead of PiGroupKey as we don't have any
         // action profile to apply to the groups of ALL type.
-        final GroupKey groupKey = getGroupKey(obj);
+        final GroupKey groupKey = new DefaultGroupKey(
+                FabricPipeliner.KRYO.serialize(groupId));
 
         resultBuilder.addGroup(
                 new DefaultGroupDescription(
@@ -512,44 +462,6 @@ class NextObjectiveTranslator
                         groupKey,
                         groupId,
                         obj.appId()));
-
-        return groupId;
-    }
-
-    private int indirectGroup(NextObjective obj,
-                              ObjectiveTranslation.Builder resultBuilder)
-            throws FabricPipelinerException {
-
-        if (isGroupModifyOp(obj)) {
-            throw new FabricPipelinerException("Simple next objective does not support" +
-                    "*_TO_EXISTING operations");
-        }
-
-        final PiTableId hashedTableId = FabricConstants.FABRIC_INGRESS_NEXT_HASHED;
-        final List<DefaultNextTreatment> defaultNextTreatments =
-                defaultNextTreatments(obj.nextTreatments(), true);
-
-        if (defaultNextTreatments.size() != 1) {
-            throw new FabricPipelinerException("Simple next objective must have a single" +
-                    " treatment");
-        }
-
-        final TrafficTreatment piTreatment;
-        final DefaultNextTreatment defaultNextTreatment = defaultNextTreatments.get(0);
-        piTreatment = mapTreatmentToPiIfNeeded(defaultNextTreatment.treatment(), hashedTableId);
-        handleEgress(obj, defaultNextTreatment.treatment(), resultBuilder, false);
-        final GroupBucket groupBucket = DefaultGroupBucket.createIndirectGroupBucket(piTreatment);
-
-        final int groupId = obj.id();
-        final PiGroupKey groupKey = (PiGroupKey) getGroupKey(obj);
-
-        resultBuilder.addGroup(new DefaultGroupDescription(
-                deviceId,
-                GroupDescription.Type.INDIRECT,
-                new GroupBuckets(Collections.singletonList(groupBucket)),
-                groupKey,
-                groupId,
-                obj.appId()));
 
         return groupId;
     }
@@ -582,7 +494,7 @@ class NextObjectiveTranslator
     }
 
     private boolean isGroupModifyOp(NextObjective obj) {
-        // If operation is ADD_TO_EXIST, REMOVE_FROM_EXIST it means we modify
+        // If operation is ADD_TO_EXIST or REMOVE_FROM_EXIST, it means we modify
         // group buckets only, no changes for flow rules.
         return obj.op() == Objective.Operation.ADD_TO_EXISTING ||
                 obj.op() == Objective.Operation.REMOVE_FROM_EXISTING;
@@ -590,18 +502,5 @@ class NextObjectiveTranslator
 
     private boolean isXconnect(NextObjective obj) {
         return obj.appId().name().contains(XCONNECT);
-    }
-
-    // Builds up the group key based on the next objective type
-    public GroupKey getGroupKey(NextObjective objective) {
-        if (objective.type() == NextObjective.Type.HASHED || objective.type() == NextObjective.Type.SIMPLE) {
-            return new PiGroupKey(FabricConstants.FABRIC_INGRESS_NEXT_HASHED,
-                    FabricConstants.FABRIC_INGRESS_NEXT_HASHED_SELECTOR,
-                    objective.id());
-        } else if (objective.type() == NextObjective.Type.BROADCAST) {
-            return new DefaultGroupKey(
-                    FabricPipeliner.KRYO.serialize(objective.id()));
-        }
-        return null;
     }
 }

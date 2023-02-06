@@ -34,7 +34,4 @@ public final class OsgiPropertyConstants {
 
     public static final String SSH_LIBRARY = "sshLibrary";
     public static final String SSH_LIBRARY_DEFAULT = "apache-mina";
-
-    public static final String SSH_KEY_PATH = "sshKeyPath";
-    public static final String SSH_KEY_PATH_DEFAULT = "/root/.ssh/id_rsa";
 }

@@ -33,7 +33,6 @@ import org.onosproject.net.flow.criteria.Criterion;
 import org.onosproject.net.flow.criteria.EthCriterion;
 import org.onosproject.net.flow.criteria.IPCriterion;
 import org.onosproject.net.flow.criteria.MplsCriterion;
-import org.onosproject.net.flow.criteria.PiCriterion;
 import org.onosproject.net.flow.criteria.VlanIdCriterion;
 import org.onosproject.net.flowobjective.ForwardingObjective;
 import org.onosproject.net.flowobjective.Objective;
@@ -49,7 +48,7 @@ import org.onosproject.net.pi.model.PiTableId;
 import org.onosproject.net.pi.runtime.PiAction;
 import org.onosproject.net.pi.runtime.PiActionParam;
 import org.onosproject.pipelines.fabric.impl.behaviour.FabricCapabilities;
-import org.onosproject.pipelines.fabric.FabricConstants;
+import org.onosproject.pipelines.fabric.impl.behaviour.FabricConstants;
 
 import java.util.List;
 import java.util.Map;
@@ -58,15 +57,8 @@ import java.util.stream.Collectors;
 
 import static java.lang.String.format;
 import static org.onosproject.net.group.DefaultGroupBucket.createCloneGroupBucket;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.PAIR_PORT;
-import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.isSrMetadataSet;
-import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.isValidSrMetadata;
-import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.portType;
 import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.criterionNotNull;
 import static org.onosproject.pipelines.fabric.impl.behaviour.FabricUtils.outputPort;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.PORT_TYPE_MASK;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.PORT_TYPE_EDGE;
-import static org.onosproject.pipelines.fabric.impl.behaviour.Constants.PORT_TYPE_INFRA;
 
 
 /**
@@ -111,8 +103,6 @@ class ForwardingObjectiveTranslator
                  FabricConstants.FABRIC_INGRESS_FORWARDING_SET_NEXT_ID_ROUTING_V6)
             .put(FabricConstants.FABRIC_INGRESS_FORWARDING_MPLS,
                  FabricConstants.FABRIC_INGRESS_FORWARDING_POP_MPLS_AND_NEXT)
-            .put(FabricConstants.FABRIC_INGRESS_ACL_ACL,
-                 FabricConstants.FABRIC_INGRESS_ACL_SET_NEXT_ID_ACL)
             .build();
 
     ForwardingObjectiveTranslator(DeviceId deviceId, FabricCapabilities capabilities) {
@@ -122,13 +112,6 @@ class ForwardingObjectiveTranslator
     @Override
     public ObjectiveTranslation doTranslate(ForwardingObjective obj)
             throws FabricPipelinerException {
-
-        if (!isValidSrMetadata(obj)) {
-            throw new FabricPipelinerException(
-                    format("Unsupported metadata configuration: metadata=%s", obj.meta()),
-                    ObjectiveError.BADPARAMS);
-        }
-
         final ObjectiveTranslation.Builder resultBuilder =
                 ObjectiveTranslation.builder();
         switch (obj.flag()) {
@@ -307,22 +290,8 @@ class ForwardingObjectiveTranslator
                 return;
             }
         }
-        TrafficSelector.Builder selectorBuilder = DefaultTrafficSelector.builder(obj.selector());
-        // Meta are used to signal the port type which can be edge or infra
-        Byte portType = portType(obj);
-        if (portType != null && !isSrMetadataSet(obj, PAIR_PORT)) {
-            if (portType == PORT_TYPE_EDGE || portType == PORT_TYPE_INFRA) {
-                selectorBuilder.matchPi(PiCriterion.builder()
-                        .matchTernary(FabricConstants.HDR_PORT_TYPE, (long) portType, PORT_TYPE_MASK)
-                        .build());
-            } else {
-                throw new FabricPipelinerException(format("Port type '%s' is not allowed for table '%s'",
-                        portType, FabricConstants.FABRIC_INGRESS_FILTERING_INGRESS_PORT_VLAN),
-                        ObjectiveError.UNSUPPORTED);
-            }
-        }
         resultBuilder.addFlowRule(flowRule(
-                obj, FabricConstants.FABRIC_INGRESS_ACL_ACL, selectorBuilder.build()));
+                obj, FabricConstants.FABRIC_INGRESS_ACL_ACL, obj.selector()));
     }
 
     private DefaultGroupDescription createCloneGroup(

@@ -22,7 +22,6 @@ import org.onosproject.net.DeviceId;
 import java.util.HashSet;
 import java.util.Set;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
@@ -30,8 +29,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public final class DefaultMeterFeatures implements MeterFeatures {
     private DeviceId deviceId;
-    private long startIndex;
-    private long endIndex;
+    private long maxMeter;
     private Set<Band.Type> bandTypes;
     private Set<Meter.Unit> units;
     private boolean burst;
@@ -39,16 +37,13 @@ public final class DefaultMeterFeatures implements MeterFeatures {
     private short maxBands;
     private short maxColor;
     private Set<MeterFeaturesFlag> features;
-    private MeterScope scope;
 
-    private DefaultMeterFeatures(DeviceId did, long startIndex, long endIndex,
+    private DefaultMeterFeatures(DeviceId did, long maxMeter,
                                  Set<Band.Type> bandTypes, Set<Meter.Unit> units,
                                  boolean burst, boolean stats,
-                                 short maxBands, short maxColor, Set<MeterFeaturesFlag> flag,
-                                 MeterScope scope) {
+                                 short maxBands, short maxColor, Set<MeterFeaturesFlag> flag) {
         this.deviceId = did;
-        this.startIndex = startIndex;
-        this.endIndex = endIndex;
+        this.maxMeter = maxMeter;
         this.bandTypes = bandTypes;
         this.burst = burst;
         this.stats = stats;
@@ -56,7 +51,6 @@ public final class DefaultMeterFeatures implements MeterFeatures {
         this.maxBands = maxBands;
         this.maxColor = maxColor;
         this.features = flag;
-        this.scope = scope;
     }
 
     @Override
@@ -66,21 +60,7 @@ public final class DefaultMeterFeatures implements MeterFeatures {
 
     @Override
     public long maxMeter() {
-        long maxMeter = 0;
-        if (startIndex != -1 && endIndex != -1) {
-            maxMeter = endIndex - startIndex + 1;
-        }
         return maxMeter;
-    }
-
-    @Override
-    public long startIndex() {
-        return startIndex;
-    }
-
-    @Override
-    public long endIndex() {
-        return endIndex;
     }
 
     @Override
@@ -118,11 +98,6 @@ public final class DefaultMeterFeatures implements MeterFeatures {
         return features;
     }
 
-    @Override
-    public MeterScope scope() {
-        return scope;
-    }
-
     public static Builder builder() {
         return new Builder();
     }
@@ -136,15 +111,13 @@ public final class DefaultMeterFeatures implements MeterFeatures {
     public String toString() {
         return MoreObjects.toStringHelper(getClass())
                 .add("deviceId", deviceId())
-                .add("startIndex", startIndex())
-                .add("endIndex", endIndex())
+                .add("maxMeter", maxMeter())
                 .add("maxBands", maxBands())
                 .add("maxColor", maxColor())
                 .add("bands", bandTypes())
                 .add("burst", isBurstSupported())
                 .add("stats", isStatsSupported())
                 .add("units", unitTypes())
-                .add("scope", scope())
                 .toString();
     }
 
@@ -154,8 +127,6 @@ public final class DefaultMeterFeatures implements MeterFeatures {
     public static final class Builder implements MeterFeatures.Builder {
         private DeviceId did;
         private long mmeter = 0L;
-        private long starti = -1L;
-        private long endi = -1L;
         private short mbands = 0;
         private short mcolors = 0;
         private Set<Band.Type> bandTypes = new HashSet<>();
@@ -163,7 +134,6 @@ public final class DefaultMeterFeatures implements MeterFeatures {
         private boolean burst = false;
         private boolean stats = false;
         private Set<MeterFeaturesFlag> features = Sets.newHashSet();
-        private MeterScope mscope = MeterScope.globalScope();
 
         @Override
         public MeterFeatures.Builder forDevice(DeviceId deviceId) {
@@ -174,18 +144,6 @@ public final class DefaultMeterFeatures implements MeterFeatures {
         @Override
         public MeterFeatures.Builder withMaxMeters(long maxMeter) {
             mmeter = maxMeter;
-            return this;
-        }
-
-        @Override
-        public MeterFeatures.Builder withStartIndex(long startIndex) {
-            starti = startIndex;
-            return this;
-        }
-
-        @Override
-        public MeterFeatures.Builder withEndIndex(long endIndex) {
-            endi = endIndex;
             return this;
         }
 
@@ -232,33 +190,9 @@ public final class DefaultMeterFeatures implements MeterFeatures {
         }
 
         @Override
-        public MeterFeatures.Builder withScope(MeterScope scope) {
-            mscope = scope;
-            return this;
-        }
-
-        @Override
         public MeterFeatures build() {
-            // In case some functions are using maxMeter
-            // and both indexes are not set
-            // Start index will be
-            // 1, if it is global scope (An OpenFlow meter)
-            // 0, for the rest (A P4RT meter)
-            if (mmeter != 0L && starti == -1L && endi == -1L) {
-                starti = mscope.isGlobal() ? 1 : 0;
-                endi = mscope.isGlobal() ? mmeter : mmeter - 1;
-            }
-            // If one of the index is unset/unvalid value, treated as no meter features
-            if (starti <= -1 || endi <= -1) {
-                starti = -1;
-                endi = -1;
-            }
-
             checkNotNull(did, "Must specify a device");
-            checkArgument(starti <= endi, "Start index must be less than or equal to end index");
-
-            return new DefaultMeterFeatures(did, starti, endi, bandTypes, units1, burst,
-                                            stats, mbands, mcolors, features, mscope);
+            return new DefaultMeterFeatures(did, mmeter, bandTypes, units1, burst, stats, mbands, mcolors, features);
         }
     }
 }

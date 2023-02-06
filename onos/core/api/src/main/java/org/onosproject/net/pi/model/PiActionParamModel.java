@@ -33,17 +33,8 @@ public interface PiActionParamModel {
 
     /**
      * Return the size in bits of this action parameter.
-     * It returns -1 if the bit width of the action parameters is not predefined.
      *
-     * @return size in bits, -1 if not predefined
+     * @return size in bits
      */
     int bitWidth();
-
-    /**
-     * Return true is the action parameters has a predefined bit width.
-     * It returns false if it can have arbitrary bit width.
-     *
-     * @return True if the action parameter has predefined bit width, false otherwise
-     */
-    boolean hasBitWidth();
 }

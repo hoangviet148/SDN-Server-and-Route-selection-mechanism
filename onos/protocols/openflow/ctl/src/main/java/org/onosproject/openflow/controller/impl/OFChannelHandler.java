@@ -19,12 +19,10 @@ package org.onosproject.openflow.controller.impl;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static org.onlab.packet.Ethernet.TYPE_BSN;
 import static org.onlab.packet.Ethernet.TYPE_LLDP;
-import static org.onlab.util.GroupedThreadFactory.groupedThreadFactory;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.openflow.controller.Dpid.uri;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
@@ -46,13 +44,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.onlab.util.GroupedThreadFactory;
 import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.onlab.osgi.DefaultServiceDirectory;
@@ -202,6 +197,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
     private List<Set<OpenFlowClassifier>> messageClassifiersMapProducer =
             new CopyOnWriteArrayList<Set<OpenFlowClassifier>>();
 
+
     /**
      * Lock held by take, poll, etc.
      */
@@ -216,6 +212,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
      * Current number of elements in enabled sub-queues.
      */
     private final AtomicInteger totalCount = new AtomicInteger();
+
 
     /**
      * Single thread executor for OFMessage dispatching.
@@ -239,15 +236,10 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
     private final Deque<OFMessage> dispatchBacklog;
 
     /**
-     * Executor for runtime status events to offload from the main thread the
-     * processing of port status, mastership and connection OF messages.
-     * Executor is instantiated as a single thread executor guaranteeing processing
-     * of device status messages in order.
+     * Port Status executor to offload from the main thread the processing of port
+     * status OF messages.
      */
-    // TODO With a huge number of ports per device congestion can be created at the runtimeExecutor,
-    //  leading to mastership roles check going into timeout, with issues in multi-instance mastership handling.
-    //  An option is to Experiment with priority tasks - to give priority (under certain conditions) to the ROLE_REPLY
-    protected ExecutorService runtimeStatusExecutor;
+    protected ExecutorService portStatusExecutor;
 
     /**
      * Create a new unconnected OFChannelHandler.
@@ -260,17 +252,8 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
         this.pendingPortStatusMsg = new CopyOnWriteArrayList<>();
         this.portDescReplies = new ArrayList<>();
         duplicateDpidFound = Boolean.FALSE;
-        String groupName = "onos/of-channel-handler";
-        String pattern = "runtime-status-%d";
-        ThreadFactory factory = new ThreadFactoryBuilder()
-                .setThreadFactory(groupedThreadFactory(groupName))
-                .setNameFormat(groupName.replace(GroupedThreadFactory.DELIMITER, "-") + "-" + pattern)
-                .setUncaughtExceptionHandler((t, e) -> {
-                    log.error("Exception on " + t.getName(), e);
-                    throw new UncheckedIOException(new IOException(e));
-                }).build();
-        runtimeStatusExecutor = newSingleThreadExecutor(
-                factory);
+        portStatusExecutor = newSingleThreadExecutor(
+                groupedThreads("onos/of-channel-handler", "port-status-%d", log));
         //Initialize queues and classifiers
         dispatchBacklog = new LinkedBlockingDeque<>(BACKLOG_READ_BUFFER_DEFAULT);
         for (int i = 0; i < NUM_OF_QUEUES; i++) {
@@ -284,10 +267,14 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
         }
     }
 
+
+
     // XXX S consider if necessary
     public void disconnectSwitch() {
         sw.disconnectSwitch();
     }
+
+
 
     //*************************
     //  Channel State Machine
@@ -388,6 +375,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
                 unhandledMessageReceived(h, m);
             }
         },
+
 
         /**
          * We are waiting for a features reply message. Once we receive it, the
@@ -582,6 +570,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
             }
         },
 
+
         /**
          * We are waiting for a OFDescriptionStat message from the switch.
          * Once we receive any stat message we try to parse it. If it's not
@@ -686,6 +675,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
             }
         },
 
+
         /**
          * We are waiting for the respective switch driver to complete its
          * configuration. Notice that we do not consider this to be part of the main
@@ -701,6 +691,8 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
                     throws IOException {
                 // will never be called. We override processOFMessage
             }
+
+
 
             @Override
             void processOFMessage(OFChannelHandler h, OFMessage m)
@@ -835,6 +827,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
             }
         },
 
+
         /**
          * This controller is in MASTER role for this switch. We enter this state
          * after requesting and winning control from the global registry.
@@ -853,19 +846,20 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
                     throws IOException, SwitchStateException {
                 // if we get here, then the error message is for something else
                 if (m.getErrType() == OFErrorType.BAD_REQUEST &&
-                        (((OFBadRequestErrorMsg) m).getCode() == OFBadRequestCode.EPERM ||
-                        ((OFBadRequestErrorMsg) m).getCode() == OFBadRequestCode.IS_SLAVE)) {
+                        (((OFBadRequestErrorMsg) m).getCode() ==
+                           OFBadRequestCode.EPERM ||
+                        ((OFBadRequestErrorMsg) m).getCode() ==
+                           OFBadRequestCode.IS_SLAVE)) {
                     // We are the master controller and the switch returned
                     // a permission error. This is a likely indicator that
-                    // the switch thinks we are slave. Reassert our role
+                    // the switch thinks we are slave. Reassert our
+                    // role
                     // FIXME: this could be really bad during role transitions
                     // if two controllers are master (even if its only for
                     // a brief period). We might need to see if these errors
                     // persist before we reassert
-                    // Scheduling in the executor to keep in line with other status events.
-                    h.runtimeStatusExecutor.submit(() -> {
-                        h.sw.reassertRole();
-                    });
+
+                    h.sw.reassertRole();
                 } else if (m.getErrType() == OFErrorType.FLOW_MOD_FAILED &&
                         ((OFFlowModFailedErrorMsg) m).getCode() ==
                         OFFlowModFailedCode.ALL_TABLES_FULL) {
@@ -916,39 +910,32 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
             @Override
             void processOFRoleReply(OFChannelHandler h, OFRoleReply m)
                     throws SwitchStateException {
-                h.runtimeStatusExecutor.execute(() -> {
-                    try {
-                        h.sw.handleRole(m);
-                    } catch (SwitchStateException e) {
-                        log.error("SwitchStateException while processing " +
-                                          "role reply message {}", m, e);
-                        log.error("Disconnecting switch {} due to switch state error: {}",
-                                  h.getSwitchInfoString(), e.getMessage());
-                        h.channel.close();
-                    }
-                });
+                h.sw.handleRole(m);
             }
 
             @Override
             void processOFPortStatus(OFChannelHandler h, OFPortStatus m)
                     throws SwitchStateException {
                 // Handing over processing of port status messages to a thread to avoid
-                // getting blocked on the main thread and resulting other OF message being delayed.
-                // Ordering of the status messages is guaranteed by runtimeStatsExecutor being a single
-                // threaded executor. This executor will execute concurrently to the netty thread; meaning
-                // that the order is no  more guaranteed like it was in the past between different
-                // status handling messages and other messages: statistics (port, flows, meters, groups)
-                // barriers, idle, features, packet-ins handled inline to the netty thread. This executor
-                // will only apply to messages during the ACTIVE state of the connection.
-                h.runtimeStatusExecutor.execute(() -> {
+                // getting blocked on the main thread and resulting other OF
+                // message being delayed.
+                // Ordering of the port status messages is guaranteed by portStatsExecutor
+                // being a single threaded executor.
+                // This executor will execute concurrently to the netty thread;
+                // meaning that the order is no more guaranteed like it was in the
+                // past between port status handling and the other events handled
+                // inline to the netty thread.
+                // This also remove guarantees of ordered processing of ROLE_CHANGED
+                // during active state, this should have no effect given that mastership
+                // is ignored here: https://github.com/opennetworkinglab/onos/blob/master/
+                // protocols/openflow/api/src/main/java/org/onosproject/openflow/controller/
+                // driver/AbstractOpenFlowSwitch.java#L279
+                h.portStatusExecutor.submit(() -> {
                     try {
                         handlePortStatusMessage(h, m, true);
                     } catch (SwitchStateException e) {
                         log.error("SwitchStateException while processing " +
                                           "port status message {}", m, e);
-                        log.error("Disconnecting switch {} due to switch state error: {}",
-                                  h.getSwitchInfoString(), e.getMessage());
-                        h.channel.close();
                     }
                 });
                 //h.dispatchMessage(m);
@@ -1092,6 +1079,8 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
             h.channel.disconnect();
         }
 
+
+
         /**
          * Handles all pending port status messages before a switch is declared
          * activated in MASTER or EQUAL role. Note that since this handling
@@ -1165,6 +1154,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
 
             h.sw.handleMessage(m);
         }
+
 
         /**
          * Process an OF message received on the channel and
@@ -1369,6 +1359,8 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
         }
     }
 
+
+
     //*************************
     //  Channel handler methods
     //*************************
@@ -1408,6 +1400,7 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
     @Override
     public void channelInactive(ChannelHandlerContext ctx)
             throws Exception {
+
         log.info("Switch disconnected callback for sw:{}. Cleaning up ...",
                  getSwitchInfoString());
 
@@ -1416,31 +1409,29 @@ class OFChannelHandler extends ChannelInboundHandlerAdapter
             dispatcher = null;
         }
 
-        if (thisdpid != 0) {
-            if (!duplicateDpidFound) {
-                // if the disconnected switch (on this ChannelHandler)
-                // was not one with a duplicate-dpid, it is safe to remove all
-                // state for it at the controller. Notice that if the disconnected
-                // switch was a duplicate-dpid, calling the method below would clear
-                // all state for the original switch (with the same dpid),
-                // which we obviously don't want.
-                runtimeStatusExecutor.submit(() -> {
-                    log.info("{}:removal called", getSwitchInfoString());
-                    if (sw != null) {
-                        sw.removeConnectedSwitch();
-                    }
-                });
-            } else {
-                // A duplicate was disconnected on this ChannelHandler,
-                // this is the same switch reconnecting, but the original state was
-                // not cleaned up - XXX check liveness of original ChannelHandler
-                log.info("{}:duplicate found", getSwitchInfoString());
-                duplicateDpidFound = Boolean.FALSE;
-            }
-        } else {
-            log.warn("no dpid in channelHandler registered for "
-                             + "disconnected switch {}", getSwitchInfoString());
-        }
+         if (thisdpid != 0) {
+             if (!duplicateDpidFound) {
+                 // if the disconnected switch (on this ChannelHandler)
+                 // was not one with a duplicate-dpid, it is safe to remove all
+                 // state for it at the controller. Notice that if the disconnected
+                 // switch was a duplicate-dpid, calling the method below would clear
+                 // all state for the original switch (with the same dpid),
+                 // which we obviously don't want.
+                 log.info("{}:removal called", getSwitchInfoString());
+                 if (sw != null) {
+                     sw.removeConnectedSwitch();
+                 }
+             } else {
+                 // A duplicate was disconnected on this ChannelHandler,
+                 // this is the same switch reconnecting, but the original state was
+                 // not cleaned up - XXX check liveness of original ChannelHandler
+                 log.info("{}:duplicate found", getSwitchInfoString());
+                 duplicateDpidFound = Boolean.FALSE;
+             }
+         } else {
+             log.warn("no dpid in channelHandler registered for "
+                     + "disconnected switch {}", getSwitchInfoString());
+         }
     }
 
     @Override

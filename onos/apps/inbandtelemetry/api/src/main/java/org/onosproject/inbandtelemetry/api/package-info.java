@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-present Open Networking Foundation
+ * Copyright 2015-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 /**
- * Implementation REST for in-band-telemetry service.
+ * Service to control a network of devices capable of collecting and exporting
+ * data plane telemetry via in-band mechanism.
  */
 package org.onosproject.inbandtelemetry.api;

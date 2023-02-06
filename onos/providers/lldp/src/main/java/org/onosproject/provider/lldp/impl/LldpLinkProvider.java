@@ -20,9 +20,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import org.onlab.packet.Ethernet;
 import org.onosproject.cfg.ComponentConfigService;
-import org.onosproject.cluster.ClusterMetadata;
-import org.onosproject.cluster.ClusterMetadataEvent;
-import org.onosproject.cluster.ClusterMetadataEventListener;
 import org.onosproject.cluster.ClusterMetadataService;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.core.ApplicationId;
@@ -78,7 +75,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
 import static java.util.concurrent.Executors.newSingleThreadScheduledExecutor;
@@ -93,6 +89,19 @@ import static org.onosproject.net.config.basics.SubjectFactories.CONNECT_POINT_S
 import static org.onosproject.net.config.basics.SubjectFactories.DEVICE_SUBJECT_FACTORY;
 import static org.onosproject.provider.lldp.impl.OsgiPropertyConstants.*;
 import static org.slf4j.LoggerFactory.getLogger;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.Arrays;
+import static java.util.Arrays.asList; 
+
+import org.onosproject.net.device.PortStatistics;
+import org.onosproject.net.PortNumber;
 
 /**
  * Provider which uses LLDP and BDDP packets to detect network infrastructure links.
@@ -104,7 +113,6 @@ import static org.slf4j.LoggerFactory.getLogger;
                 PROP_PROBE_RATE + ":Integer=" + PROBE_RATE_DEFAULT,
                 PROP_STALE_LINK_AGE + ":Integer=" + STALE_LINK_AGE_DEFAULT,
                 PROP_DISCOVERY_DELAY + ":Integer=" + DISCOVERY_DELAY_DEFAULT,
-                PROP_USE_STALE_LINK_AGE + ":Boolean=" + USE_STALE_LINK_AGE_DEFAULT,
         })
 public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProvider {
 
@@ -112,7 +120,7 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
 
     private static final String FORMAT =
             "Settings: enabled={}, useBDDP={}, probeRate={}, " +
-                    "staleLinkAge={}, maxLLDPage={}, useStaleLinkAge={}";
+                    "staleLinkAge={}, maxLLDPage={}";
 
     // When a Device/Port has this annotation, do not send out LLDP/BDDP
     public static final String NO_LLDP = "no-lldp";
@@ -154,11 +162,27 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
     private ScheduledExecutorService executor;
     protected ExecutorService eventExecutor;
 
+
+
+    public Map<String, ArrayList<String>> linkWeight = new HashMap<String, ArrayList<String>>();
+    public Map<String, ArrayList<String>> portStaTopo = new HashMap<String, ArrayList<String>>();
+    public Map<String, Float> avgRateQoEArr = new HashMap<String, Float>(); 
+    public Map<Integer, Double> arrLossPath = new HashMap<Integer, Double>(){{
+        put(0, 0.0);
+        put(1, 0.0);
+        put(2, 0.0);
+        put(3, 0.0);
+        put(4, 0.0);
+
+    }};
+
     private boolean shuttingDown = false;
 
     // TODO: Add sanity checking for the configurable params based on the delays
     private static final long DEVICE_SYNC_DELAY = 5;
     private static final long LINK_PRUNER_DELAY = 3;
+
+    private static final long Loss_Window = 3;
 
     /** If false, link discovery is disabled. */
     protected boolean enabled = false;
@@ -175,9 +199,6 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
     /** Number of millis beyond which an LLDP packet will not be accepted. */
     private int maxDiscoveryDelayMs = DISCOVERY_DELAY_DEFAULT;
 
-    /** If false, StaleLinkAge capability is disabled. */
-    private boolean useStaleLinkAge = USE_STALE_LINK_AGE_DEFAULT;
-
     private final LinkDiscoveryContext context = new InternalDiscoveryContext();
     private final InternalRoleListener roleListener = new InternalRoleListener();
     private final InternalDeviceListener deviceListener = new InternalDeviceListener();
@@ -189,9 +210,6 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
     // Most recent time a tracked link was seen; links are tracked if their
     // destination connection point is mastered by this controller instance.
     private final Map<LinkKey, Long> linkTimes = Maps.newConcurrentMap();
-
-    // Cache for clustermetadata
-    private AtomicReference<ClusterMetadata> clusterMetadata = new AtomicReference<>();
 
     private ApplicationId appId;
 
@@ -208,6 +226,9 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
 
     public static final String CONFIG_KEY = "suppression";
     public static final String FEATURE_NAME = "linkDiscovery";
+
+    public String previousWString = "";
+    ArrayList<String> arrLink = new ArrayList<String>();
 
     private final Set<ConfigFactory<?, ?>> factories = ImmutableSet.of(
             new ConfigFactory<ApplicationId, SuppressionConfig>(APP_SUBJECT_FACTORY,
@@ -235,7 +256,6 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
     );
 
     private final InternalConfigListener cfgListener = new InternalConfigListener();
-    private final ClusterMetadataEventListener metadataListener = new InternalClusterMetadataListener();
 
     /**
      * Creates an OpenFlow link provider.
@@ -251,7 +271,7 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
             return defMac;
         }
 
-        String srcMac = ProbedLinkProvider.fingerprintMac(clusterMetadata.get());
+        String srcMac = ProbedLinkProvider.fingerprintMac(clusterMetadataService.getClusterMetadata());
         if (srcMac.equals(defMac)) {
             log.warn("Couldn't generate fingerprint. Using default value {}", defMac);
             return defMac;
@@ -276,13 +296,13 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
             cfg = this.setDefaultSuppressionConfig();
         }
         cfgListener.reconfigureSuppressionRules(cfg);
-        if (clusterMetadataService != null) {
-            clusterMetadataService.addListener(metadataListener);
-            clusterMetadata.set(clusterMetadataService.getClusterMetadata());
-        }
 
         modified(context);
         log.info("Started");
+        log.info("Chay file loss");
+
+        // enable();
+
     }
 
     private SuppressionConfig setDefaultSuppressionConfig() {
@@ -296,9 +316,6 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
     @Deactivate
     public void deactivate() {
         shuttingDown = true;
-        if (clusterMetadataService != null) {
-            clusterMetadataService.removeListener(metadataListener);
-        }
         cfgRegistry.removeListener(cfgListener);
         factories.forEach(cfgRegistry::unregisterConfigFactory);
 
@@ -313,7 +330,7 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
     public void modified(ComponentContext context) {
         Dictionary<?, ?> properties = context != null ? context.getProperties() : new Properties();
 
-        boolean newEnabled, newUseBddp, newUseStaleLinkAge;
+        boolean newEnabled, newUseBddp;
         int newProbeRate, newStaleLinkAge, newDiscoveryDelay;
         try {
             String s = get(properties, PROP_ENABLED);
@@ -331,17 +348,13 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
             s = get(properties, PROP_DISCOVERY_DELAY);
             newDiscoveryDelay = isNullOrEmpty(s) ? maxDiscoveryDelayMs : Integer.parseInt(s.trim());
 
-            s = get(properties, PROP_USE_STALE_LINK_AGE);
-            newUseStaleLinkAge = isNullOrEmpty(s) || Boolean.parseBoolean(s.trim());
-
         } catch (NumberFormatException e) {
-            log.warn("Component configuration had invalid values", e);
+            log.warn("Component configuratiosn had invalid values", e);
             newEnabled = enabled;
             newUseBddp = useBddp;
             newProbeRate = probeRate;
             newStaleLinkAge = staleLinkAge;
             newDiscoveryDelay = maxDiscoveryDelayMs;
-            newUseStaleLinkAge = useStaleLinkAge;
         }
 
         boolean wasEnabled = enabled;
@@ -351,7 +364,6 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
         probeRate = newProbeRate;
         staleLinkAge = newStaleLinkAge;
         maxDiscoveryDelayMs = newDiscoveryDelay;
-        useStaleLinkAge = newUseStaleLinkAge;
 
         if (!wasEnabled && enabled) {
             enable();
@@ -364,7 +376,7 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
             }
         }
 
-        log.info(FORMAT, enabled, useBddp, probeRate, staleLinkAge, maxDiscoveryDelayMs, useStaleLinkAge);
+        log.info(FORMAT, enabled, useBddp, probeRate, staleLinkAge, maxDiscoveryDelayMs);
     }
 
     /**
@@ -383,6 +395,10 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
                                      DEVICE_SYNC_DELAY, DEVICE_SYNC_DELAY, SECONDS);
         executor.scheduleAtFixedRate(new LinkPrunerTask(),
                                      LINK_PRUNER_DELAY, LINK_PRUNER_DELAY, SECONDS);
+
+        // goi ham loss Cal
+        log.info("Goi ham loss");
+        executor.scheduleAtFixedRate(new lossCal(), Loss_Window, Loss_Window, SECONDS);
 
         requestIntercepts();
     }
@@ -688,6 +704,143 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
         }
     }
 
+
+    //Cal loss of path each 3s
+    private final class lossCal implements Runnable {
+    //public void lossCal(){
+        @Override
+        public void run() {
+            int numAction = 5;
+            //int numAction = 10;
+            String tmpStrLoss= "";
+            
+            //map.put("dog", "type of animal");  
+            DeviceId sDeviceID = null;
+            DeviceId dDeviceID = null;
+            PortNumber srcPort = PortNumber.portNumber(6);
+            
+            double packetSent = 0, packetReceived = 0;
+            double loss = 0;
+            //Cal cumulative loss on path
+
+            if(deviceService != null){
+                //log.info("\n********************************Hello 0\n");
+                for(Device d: deviceService.getDevices()){
+                    if(d.id().toString().compareTo("of:0000000000000006") == 0){
+                        sDeviceID = d.id();
+                    }else if(d.id().toString().compareTo("of:0000000000000007") == 0){
+                        dDeviceID = d.id();
+                    }
+
+                }
+                if(sDeviceID != null){
+                    PortStatistics sPortStatistic = deviceService.getDeltaStatisticsForPort(sDeviceID, srcPort);
+                    if(sPortStatistic != null){
+                        packetReceived = sPortStatistic.packetsReceived();
+                    }  
+                }
+                
+                //Max_QoE
+                int action = 0;
+                if(dDeviceID != null){
+                    try {
+                        BufferedReader reader = new BufferedReader(
+                            new FileReader("/home/onos/onos/apps/segmentrouting/app/src/main/java/org/onosproject/segmentrouting/RoutingPaths.csv"));
+                        action = Integer.parseInt(reader.readLine());
+                        reader.close();
+                    }catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    PortNumber dstPort = PortNumber.portNumber(action+1);
+                    PortStatistics dPortStatistic = deviceService.getDeltaStatisticsForPort(dDeviceID, dstPort);
+                    if(dPortStatistic != null){
+                            
+                        packetSent = dPortStatistic.packetsReceived();
+                        // if(packetReceived > packetSent && packetReceived != 0){
+                        //     loss = (packetReceived - packetSent)/packetReceived;
+                        // }else{
+                        //     loss = 0;
+                        // }
+
+                        if(packetReceived != 0){
+                            loss = (packetReceived - packetSent)/packetReceived;
+                        }else{
+                            loss = 0;
+                        }
+                    }
+                    // tinh loss
+                    // if(loss > 0.75){
+                    //     loss = 0;
+                    // }
+                    // //Nomalize loss with maximum loss of 20%
+                    // loss = loss / 0.2;
+                    // if(loss > 1){
+                    //     loss = 1;
+                    // }
+
+                    //tmpStrLoss = tmpStrLoss + String.valueOf(i)+":"+String.valueOf(loss)+";";
+                    arrLossPath.replace(action, loss);
+
+                    for(int i = 0; i < arrLossPath.size(); i++){
+                        tmpStrLoss = tmpStrLoss + String.valueOf(i)+":"+String.valueOf(arrLossPath.get(i))+";";
+                    }
+                    // tinh packet sent, received va loss cua chu trinh action from src to dst
+                    log.info("\n********************************Action: {}, Received: {}, Sent: {}, Loss: {}\n", action,packetReceived,packetSent, tmpStrLoss);
+                   
+                    try {
+                        tmpStrLoss = tmpStrLoss.substring(0,tmpStrLoss.length()-1);
+                        BufferedWriter bw_loss = new BufferedWriter(
+                            new FileWriter("/home/onos/onos/providers/lldpcommon/src/main/java/org/onosproject/provider/lldpcommon/loss.csv"));
+                        bw_loss.write(tmpStrLoss);
+                        bw_loss.close();                        
+                    }catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+                
+                /*
+                if(dDeviceID != null){
+                    for(int i = 0; i < numAction; i++){
+                        PortNumber dstPort = PortNumber.portNumber(i+1);
+                        PortStatistics dPortStatistic = deviceService.getDeltaStatisticsForPort(dDeviceID, dstPort);
+                        if(dPortStatistic != null){
+                            
+                            packetSent = dPortStatistic.packetsReceived();
+                            if(packetReceived > packetSent && packetReceived != 0){
+                                loss = (packetReceived - packetSent)/packetReceived;
+                            }else{
+                                loss = 0;
+                            }
+                        }
+                        if(loss > 0.75){
+                            loss = 0;
+                        }
+                        //Nomalize loss with maximum loss of 20%
+                        loss = loss / 0.2;
+                        if(loss > 1){
+                            loss = 1;
+                        }
+                        tmpStrLoss = tmpStrLoss + String.valueOf(i)+":"+String.valueOf(loss)+";";
+                        //arrLossPath.put(i, loss);
+                    }
+
+                    try {
+                        tmpStrLoss = tmpStrLoss.substring(0,tmpStrLoss.length()-1);
+                        BufferedWriter bw_loss = new BufferedWriter(new FileWriter("/home/vantong/onos/providers/lldpcommon/src/main/java/org/onosproject/provider/lldpcommon/loss.csv"));
+                        bw_loss.write(tmpStrLoss);
+                        bw_loss.close();                        
+                    }catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+                */
+
+                //log.info("\n********************************Loss: {}\n",tmpStrLoss);
+            }
+        }
+    }
+
+
     /**
      * Processes incoming packets.
      */
@@ -711,6 +864,89 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
             if (ld.handleLldp(context)) {
                 context.block();
             }
+            
+
+            if(ld != null){
+
+                //if((ld.srcLink.compareTo("of:0000000000000015") == 0 && ld.dstLink.compareTo("of:0000000000000002") == 0) || (ld.srcLink.compareTo("of:0000000000000002") == 0 && ld.dstLink.compareTo("of:0000000000000016") == 0)){
+                //log.info("\nLink2 from {} to {}\n",ld.srcLink,ld.dstLink);
+
+                if(ld.validatedLink != 0){
+                    ArrayList<String> arrNetWorkPara = new ArrayList<String>();
+                    ArrayList<String> arrPortStatisticPara = new ArrayList<String>();
+                    arrNetWorkPara.add(ld.de_link);
+                    arrNetWorkPara.add(ld.pl_link);
+                    arrNetWorkPara.add(ld.r_link);
+
+                    arrPortStatisticPara.add(ld.bSentSrc_link);
+                    arrPortStatisticPara.add(ld.bReceivedSrc_link);
+                    arrPortStatisticPara.add(ld.pSentSrc_link);
+                    arrPortStatisticPara.add(ld.pReceivedSrc_link);
+
+                    if(linkWeight.size() == 0){
+                        linkWeight.put(ld.idLink, arrNetWorkPara);
+
+                        portStaTopo.put(ld.idLink, arrPortStatisticPara);
+                    }else{
+                        if(!linkWeight.keySet().contains(ld.idLink)){
+                            linkWeight.put(ld.idLink, arrNetWorkPara);
+
+                            portStaTopo.put(ld.idLink, arrPortStatisticPara);
+                        }else{
+                            linkWeight.replace(ld.idLink, arrNetWorkPara);
+
+                            portStaTopo.replace(ld.idLink, arrPortStatisticPara);
+                        }
+                    }
+
+                    String wString = "", sPortStatistic = "";
+                    //Change 20 if use another topo 5*4
+                    int tmpWeightValue = 5*4;
+                    try {
+                        if(linkWeight.size() >= tmpWeightValue){
+                        //if(linkWeight.size() >= 2){
+                            BufferedWriter bw = new BufferedWriter(new FileWriter("/home/onos/onos/providers/lldpcommon/src/main/java/org/onosproject/provider/lldpcommon/link_para.csv"));
+                            for(String s: linkWeight.keySet()){
+                                if(linkWeight.get(s).size() == 3){
+                                    wString = wString + ";" + s+"*"+ linkWeight.get(s).get(0)+"*"+ linkWeight.get(s).get(1)+"*"+ linkWeight.get(s).get(2);
+                                }
+                            
+                            }
+                            if(wString.length() >= 2){
+                                bw.write(wString.substring(1, wString.length()));
+                            }
+                            
+                            bw.close();
+                        }
+                        if(portStaTopo.size() >= tmpWeightValue){
+                            BufferedWriter bw2 = new BufferedWriter(new FileWriter("/home/onos/onos/providers/lldpcommon/src/main/java/org/onosproject/provider/lldpcommon/portStatistic.csv"));
+                            for(String s: portStaTopo.keySet()){
+                                if(portStaTopo.get(s).size() == 4){
+                                    sPortStatistic = sPortStatistic + ";" + s+"*"+ portStaTopo.get(s).get(0)+"*"+ portStaTopo.get(s).get(1)+"*"+ portStaTopo.get(s).get(2)+"*"+portStaTopo.get(s).get(3);
+                                }
+                            
+                            }
+                            if(sPortStatistic.length() >= 2){
+                                bw2.write(sPortStatistic.substring(1, sPortStatistic.length()));
+                            }
+                            
+                            bw2.close();
+                        }
+
+                        
+                    }catch (IOException e) {
+                        e.printStackTrace();
+                    }
+
+
+                }
+                ld.validatedLink = 1;
+
+                //}
+            }
+
+
+
         }
     }
 
@@ -754,26 +990,10 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
                         return true;
                     }
                     if (isStale(e.getValue())) {
-                        if (useStaleLinkAge) {
-                            providerService.linkVanished(new DefaultLinkDescription(e.getKey().src(),
+                        providerService.linkVanished(new DefaultLinkDescription(e.getKey().src(),
                                                                                 e.getKey().dst(),
                                                                                 DIRECT));
-                            return true;
-                        }
-                        // if one of the device is not available - let's prune the link
-                        if (!deviceService.isAvailable(e.getKey().src().deviceId()) ||
-                                !deviceService.isAvailable(e.getKey().dst().deviceId())) {
-                            return true;
-                        }
-                        // if one of the ports is not enable - let's prune the link
-                        Port srcPort = deviceService.getPort(e.getKey().src());
-                        Port dstPort = deviceService.getPort(e.getKey().dst());
-                        if (!srcPort.isEnabled() || !dstPort.isEnabled()) {
-                            return true;
-                        }
-                        log.trace("VanishStaleLinkAge feature is disabled, " +
-                                        "not bringing down link src {} dst {} with expired StaleLinkAge",
-                                 e.getKey().src(), e.getKey().dst());
+                        return true;
                     }
                     return false;
                 }).clear();
@@ -846,8 +1066,7 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
 
         @Override
         public String lldpSecret() {
-            return clusterMetadata.get() != null ?
-                    clusterMetadata.get().getClusterSecret() : null;
+            return clusterMetadataService.getClusterMetadata().getClusterSecret();
         }
 
         @Override
@@ -916,13 +1135,6 @@ public class LldpLinkProvider extends AbstractProvider implements ProbedLinkProv
                     log.trace("Network config reconfigured");
                 }
             });
-        }
-    }
-
-    private class InternalClusterMetadataListener implements ClusterMetadataEventListener {
-        @Override
-        public void event(ClusterMetadataEvent event) {
-            clusterMetadata.set(event.subject());
         }
     }
 }

@@ -51,7 +51,6 @@ public final class ImmutableByteSequence {
     The order of a newly-created byte buffer is always BIG_ENDIAN.
      */
     private ByteBuffer value;
-    private boolean isAscii = false;
 
     /**
      * Private constructor. Creates a new byte sequence object backed by the
@@ -64,11 +63,6 @@ public final class ImmutableByteSequence {
         // Rewind buffer so it's ready to be read.
         // No write operation should be performed on it from now on.
         this.value.rewind();
-    }
-
-    private ImmutableByteSequence(ByteBuffer value, boolean isAscii) {
-        this(value);
-        this.isAscii = isAscii;
     }
 
     /**
@@ -132,20 +126,6 @@ public final class ImmutableByteSequence {
     }
 
     /**
-     * Creates a new immutable byte sequence from the given string.
-     *
-     * @param original a string
-     * @return a new byte buffer object
-     */
-    public static ImmutableByteSequence copyFrom(String original) {
-        checkArgument(original != null && original.length() > 0,
-                      "Cannot copy from an empty or null string");
-        return new ImmutableByteSequence(ByteBuffer.allocate(original.length())
-                                                 .put(original.getBytes()),
-                                         true);
-    }
-
-    /**
      * Creates a new byte sequence of 8 bytes containing the given long value.
      *
      * @param original a long value
@@ -187,53 +167,6 @@ public final class ImmutableByteSequence {
     public static ImmutableByteSequence copyFrom(byte original) {
         return new ImmutableByteSequence(
                 ByteBuffer.allocate(Byte.BYTES).put(original));
-    }
-
-    /**
-     * Creates a new immutable byte sequence while trimming or expanding the
-     * content of the given byte buffer to fit the given bit-width. Calling this
-     * method has the same behavior as
-     * {@code ImmutableByteSequence.copyFrom(original).fit(bitWidth)}.
-     *
-     * @param original a byte buffer value
-     * @param bitWidth a non-zero positive integer
-     * @return a new immutable byte sequence
-     * @throws ByteSequenceTrimException if the byte buffer cannot be fitted
-     */
-    public static ImmutableByteSequence copyAndFit(ByteBuffer original, int bitWidth)
-            throws ByteSequenceTrimException {
-        checkArgument(original != null && original.capacity() > 0,
-                      "Cannot copy from an empty or null byte buffer");
-        checkArgument(bitWidth > 0,
-                      "bit-width must be a non-zero positive integer");
-        if (original.order() == ByteOrder.LITTLE_ENDIAN) {
-            // FIXME: this can be improved, e.g. read bytes in reverse order from original
-            byte[] newBytes = new byte[original.capacity()];
-            original.get(newBytes);
-            reverse(newBytes);
-            return internalCopyAndFit(ByteBuffer.wrap(newBytes), bitWidth);
-        } else {
-            return internalCopyAndFit(original.duplicate(), bitWidth);
-        }
-    }
-
-    private static ImmutableByteSequence internalCopyAndFit(ByteBuffer byteBuf, int bitWidth)
-            throws ByteSequenceTrimException {
-        final int byteWidth = (bitWidth + 7) / 8;
-        final ByteBuffer newByteBuffer = ByteBuffer.allocate(byteWidth);
-        byteBuf.rewind();
-        if (byteWidth >= byteBuf.capacity()) {
-            newByteBuffer.position(byteWidth - byteBuf.capacity());
-            newByteBuffer.put(byteBuf);
-        } else {
-            for (int i = 0; i < byteBuf.capacity() - byteWidth; i++) {
-                if (byteBuf.get(i) != 0) {
-                    throw new ByteSequenceTrimException(byteBuf, bitWidth);
-                }
-            }
-            newByteBuffer.put(byteBuf.position(byteBuf.capacity() - byteWidth));
-        }
-        return new ImmutableByteSequence(newByteBuffer);
     }
 
     /**
@@ -326,7 +259,7 @@ public final class ImmutableByteSequence {
      * @return an integer value
      */
     public int size() {
-        return this.value.limit() - this.value.position();
+        return this.value.capacity();
     }
 
     /**
@@ -461,34 +394,19 @@ public final class ImmutableByteSequence {
     }
 
     /**
-     * Returns the ASCII representation of the byte sequence if the content can
-     * be interpreted as an ASCII string, otherwise returns the hexadecimal
-     * representation of this byte sequence, e.g.0xbeef. The length of the
-     * returned string is not representative of the length of the byte sequence,
-     * as all padding zeros are removed.
+     * Returns a hexadecimal representation of this byte sequence, e.g.
+     * 0xbeef. The length of the returned string is not representative of the
+     * length of the byte sequence, as all padding zeros are removed.
      *
      * @return hexadecimal representation
      */
     @Override
     public String toString() {
-        if (this.isAscii()) {
-            return new String(value.array());
-        } else {
-            return "0x" + HexString
-                    .toHexString(value.array(), "")
-                    // Remove leading zeros, but leave one if string is all zeros.
-                    .replaceFirst("^0+(?!$)", "");
-        }
-    }
-
-    /**
-     * Checks if the content can be interpreted as an ASCII printable string.
-     *
-     * @return True if the content can be interpreted as an ASCII printable
-     *  string, false otherwise
-     */
-    public boolean isAscii() {
-        return isAscii;
+        final String hexValue = HexString
+                .toHexString(value.array(), "")
+                // Remove leading zeros, but leave one if string is all zeros.
+                .replaceFirst("^0+(?!$)", "");
+        return "0x" + hexValue;
     }
 
     /**
@@ -514,7 +432,7 @@ public final class ImmutableByteSequence {
         checkNotNull(original, "byte sequence cannot be null");
         checkArgument(bitWidth > 0, "bit-width must be a non-zero positive integer");
 
-        int newByteWidth = (bitWidth + 7) / 8;
+        int newByteWidth = (int) Math.ceil((double) bitWidth / 8);
 
         if (bitWidth == original.size() * 8) {
             // No need to fit.
@@ -547,32 +465,11 @@ public final class ImmutableByteSequence {
     }
 
     /**
-     * Returns a new ImmutableByteSequence with same content as this one, but with leading zero bytes stripped.
-     *
-     * @return new ImmutableByteSequence
-     */
-    public ImmutableByteSequence canonical() {
-        ByteBuffer newByteBuffer = this.value.duplicate();
-        ImmutableByteSequence canonicalBs = new ImmutableByteSequence(newByteBuffer);
-        canonicalBs.value.rewind();
-        while (canonicalBs.value.hasRemaining() && canonicalBs.value.get() == 0) {
-            // Make style check happy
-        }
-        canonicalBs.value.position(canonicalBs.value.position() - 1);
-        return canonicalBs;
-    }
-
-    /**
-     * Signals a trim exception during byte sequence creation.
+     * Signals that a byte sequence cannot be trimmed.
      */
     public static class ByteSequenceTrimException extends Exception {
         ByteSequenceTrimException(ImmutableByteSequence original, int bitWidth) {
             super(format("cannot trim %s into a %d bits long value",
-                         original, bitWidth));
-        }
-
-        ByteSequenceTrimException(ByteBuffer original, int bitWidth) {
-            super(format("cannot trim %s (ByteBuffer) into a %d bits long value",
                          original, bitWidth));
         }
     }

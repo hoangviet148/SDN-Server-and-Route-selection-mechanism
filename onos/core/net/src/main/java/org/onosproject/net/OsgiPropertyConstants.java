@@ -125,9 +125,6 @@ public final class OsgiPropertyConstants {
     public static final String MM_PURGE_ON_DISCONNECTION = "purgeOnDisconnection";
     public static final boolean MM_PURGE_ON_DISCONNECTION_DEFAULT = false;
 
-    public static final String MM_USER_DEFINED_INDEX = "userDefinedIndex";
-    public static final boolean MM_USER_DEFINED_INDEX_DEFAULT = false;
-
     public static final String NRM_ARP_ENABLED = "arpEnabled";
     public static final boolean NRM_ARP_ENABLED_DEFAULT = true;
 
@@ -164,6 +161,4 @@ public final class OsgiPropertyConstants {
     public static final String FOM_ACCUMULATOR_MAX_BATCH_MILLIS = "accumulatorMaxBatchMillis";
     public static final int FOM_ACCUMULATOR_MAX_BATCH_MILLIS_DEFAULT = 500;
 
-    public static final String IFOM_OBJ_TIMEOUT_MS = "objectiveTimeoutMs";
-    public static final int IFOM_OBJ_TIMEOUT_MS_DEFAULT = 15000;
 }

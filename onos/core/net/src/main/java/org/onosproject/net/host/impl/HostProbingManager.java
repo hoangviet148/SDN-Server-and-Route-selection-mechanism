@@ -52,12 +52,7 @@ public class HostProbingManager extends
     private static final String SCHEME = "hostprobing";
 
     private HostProbingStoreDelegate delegate = event -> {
-        HostProbingProvider hostProbingProvider = getProvider(SCHEME);
-        if (hostProbingProvider != null) {
-            hostProbingProvider.processEvent(event);
-        } else {
-            log.warn("Unable to find host probing provider. Cannot handle event {}", event);
-        }
+        getProvider(SCHEME).processEvent(event);
     };
 
     @Activate

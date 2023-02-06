@@ -15,8 +15,6 @@
  */
 package org.onosproject.provider.snmp.device.impl;
 
-import org.onosproject.snmp.SnmpException;
-import org.onosproject.snmp.ctl.DefaultSnmpv3Device;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Deactivate;
@@ -54,7 +52,6 @@ import org.onosproject.snmp.SnmpDeviceConfig;
 import org.onosproject.snmp.ctl.DefaultSnmpDevice;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
-import org.snmp4j.mp.SnmpConstants;
 
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -169,14 +166,7 @@ public class SnmpDeviceProvider extends AbstractProvider
         deviceSubjects.forEach(deviceId -> {
             SnmpDeviceConfig config =
                     netCfgService.getConfig(deviceId, SnmpDeviceConfig.class);
-            if (config.version() == SnmpConstants.version2c) {
-                buildDevice(new DefaultSnmpDevice(config));
-            } else if (config.version() == SnmpConstants.version3) {
-                buildDevice(new DefaultSnmpv3Device(config));
-            } else {
-                throw new SnmpException(
-                        String.format("Invalid snmp version %d", config.version()));
-            }
+            buildDevice(new DefaultSnmpDevice(config));
         });
     }
 

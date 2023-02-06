@@ -43,13 +43,7 @@ public interface PiTableAction {
          * Executes the action profile member specified by the given
          * identifier.
          */
-        ACTION_PROFILE_MEMBER_ID,
-
-        /**
-         * Executes the given action set. Used in one-shot action profile
-         * programming.
-         */
-        ACTION_SET
+        ACTION_PROFILE_MEMBER_ID
     }
 
     /**

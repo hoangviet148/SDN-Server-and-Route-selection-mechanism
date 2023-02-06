@@ -1378,31 +1378,17 @@ public abstract class LinkCollectionCompiler<T> {
                 break;
 
             case ARP_SPA:
-                ModArpIPInstruction srcArpIpInstr = (ModArpIPInstruction) l3instruction;
-                if (srcArpIpInstr.ip().isIp4()) {
-                    builder.matchArpSpa((Ip4Address) srcArpIpInstr.ip());
+                ModArpIPInstruction arpIpInstr = (ModArpIPInstruction) l3instruction;
+                if (arpIpInstr.ip().isIp4()) {
+                    builder.matchArpSpa((Ip4Address) arpIpInstr.ip());
                 } else {
                     throw new IntentCompilationException(UNSUPPORTED_ARP);
                 }
                 break;
 
             case ARP_SHA:
-                ModArpEthInstruction srcArpEthInstr = (ModArpEthInstruction) l3instruction;
-                builder.matchArpSha(srcArpEthInstr.mac());
-                break;
-
-            case ARP_TPA:
-                ModArpIPInstruction dstArpIpInstr = (ModArpIPInstruction) l3instruction;
-                if (dstArpIpInstr.ip().isIp4()) {
-                    builder.matchArpTpa((Ip4Address) dstArpIpInstr.ip());
-                } else {
-                    throw new IntentCompilationException(UNSUPPORTED_ARP);
-                }
-                break;
-
-            case ARP_THA:
-                ModArpEthInstruction dstArpEthInstr = (ModArpEthInstruction) l3instruction;
-                builder.matchArpTha(dstArpEthInstr.mac());
+                ModArpEthInstruction arpEthInstr = (ModArpEthInstruction) l3instruction;
+                builder.matchArpSha(arpEthInstr.mac());
                 break;
 
             case ARP_OP:

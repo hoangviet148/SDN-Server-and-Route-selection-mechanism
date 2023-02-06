@@ -52,7 +52,6 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.Host;
 import org.onosproject.net.HostId;
 import org.onosproject.net.HostLocation;
-import org.onosproject.net.Port;
 import org.onosproject.net.behaviour.Pipeliner;
 import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.DefaultTrafficSelector;
@@ -1087,21 +1086,15 @@ public class Dhcp4HandlerImpl implements DhcpHandler, HostProvider {
             log.warn("Failed to determine where to send {}", dhcpPayload.getPacketType());
             return;
         }
+
         Interface outIface = outInterface.get();
-
         ConnectPoint location = outIface.connectPoint();
-        if (!location.port().hasName()) {
-            location = translateSwitchPort(location);
-        }
-
         VlanId vlanId = getVlanIdFromRelayAgentOption(dhcpPayload);
         if (vlanId == null) {
             vlanId = outIface.vlan();
         }
-
         MacAddress macAddress = MacAddress.valueOf(dhcpPayload.getClientHardwareAddress());
         HostId hostId = HostId.hostId(macAddress, vlanId);
-
         DhcpRecord record = dhcpRelayStore.getDhcpRecord(hostId).orElse(null);
         if (record == null) {
             record = new DhcpRecord(HostId.hostId(macAddress, vlanId));
@@ -1446,14 +1439,9 @@ public class Dhcp4HandlerImpl implements DhcpHandler, HostProvider {
             log.warn("Can't find output interface for dhcp: {}", dhcpPayload);
             return;
         }
+
         Interface outIface = outInterface.get();
-
-        ConnectPoint location = outIface.connectPoint();
-        if (!location.port().hasName()) {
-            location = translateSwitchPort(location);
-        }
-
-        HostLocation hostLocation = new HostLocation(location, System.currentTimeMillis());
+        HostLocation hostLocation = new HostLocation(outIface.connectPoint(), System.currentTimeMillis());
         MacAddress macAddress = MacAddress.valueOf(dhcpPayload.getClientHardwareAddress());
         VlanId vlanId = getVlanIdFromRelayAgentOption(dhcpPayload);
         if (vlanId == null) {
@@ -2004,15 +1992,5 @@ public class Dhcp4HandlerImpl implements DhcpHandler, HostProvider {
             }
         }
         return foundServerInfo;
-    }
-
-    /* Connect point coming from interfaces do not have port name
-       we use the device service as translation service */
-    private ConnectPoint translateSwitchPort(ConnectPoint connectPoint) {
-        Port devicePort = deviceService.getPort(connectPoint);
-        if (devicePort != null) {
-            return new ConnectPoint(connectPoint.deviceId(), devicePort.number());
-        }
-        return connectPoint;
     }
 }

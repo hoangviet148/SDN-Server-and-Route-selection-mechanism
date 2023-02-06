@@ -47,7 +47,7 @@ public class TestStorageService extends StorageServiceAdapter {
 
     @Override
     public <V> AtomicValueBuilder<V> atomicValueBuilder() {
-        return TestAtomicValue.builder();
+        throw new UnsupportedOperationException("atomicValueBuilder");
     }
 
     @Override

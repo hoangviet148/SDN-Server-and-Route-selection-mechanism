@@ -58,13 +58,20 @@ public class ApplicationNameCompleter extends AbstractCompleter {
         ApplicationService service = get(ApplicationService.class);
         Iterator<Application> it = service.getApplications().iterator();
         SortedSet<String> strings = delegate.getStrings();
-        while (it.hasNext()) {
-            Application app = it.next();
-            ApplicationState state = service.getState(app.id());
-            if ("uninstall".equals(cmd) || "download".equals(cmd) ||
-                    ("activate".equals(cmd) && state == INSTALLED) ||
-                    ("deactivate".equals(cmd) && state == ACTIVE)) {
-                strings.add(app.id().name());
+        if ("install".equals(cmd)) {
+            it = service.getRegisteredApplications().iterator();
+            while (it.hasNext()) {
+                strings.add(it.next().id().name());
+            }
+        } else {
+            while (it.hasNext()) {
+                Application app = it.next();
+                ApplicationState state = service.getState(app.id());
+                if ("uninstall".equals(cmd) || "download".equals(cmd) ||
+                        ("activate".equals(cmd) && state == INSTALLED) ||
+                        ("deactivate".equals(cmd) && state == ACTIVE)) {
+                    strings.add(app.id().name());
+                }
             }
         }
 

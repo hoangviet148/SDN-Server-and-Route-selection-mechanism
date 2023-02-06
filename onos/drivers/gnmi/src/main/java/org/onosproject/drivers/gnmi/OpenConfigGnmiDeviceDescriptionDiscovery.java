@@ -25,7 +25,6 @@ import gnmi.Gnmi.GetResponse;
 import org.onlab.packet.ChassisId;
 import org.onosproject.gnmi.api.GnmiClient;
 import org.onosproject.gnmi.api.GnmiController;
-import org.onosproject.gnmi.ctl.GnmiControllerImpl;
 import org.onosproject.grpc.utils.AbstractGrpcHandlerBehaviour;
 import org.onosproject.net.AnnotationKeys;
 import org.onosproject.net.DefaultAnnotations;
@@ -58,25 +57,12 @@ public class OpenConfigGnmiDeviceDescriptionDiscovery
     private static final Logger log = LoggerFactory
             .getLogger(OpenConfigGnmiDeviceDescriptionDiscovery.class);
 
-    private static final String LAST_CHANGE = "last-change";
-    private static final String SDK_PORT = "sdk-port";
+    private static final String LAST_CHANGE = "last-changed";
 
     private static final String UNKNOWN = "unknown";
 
-    private GnmiController gnmiController;
-
     public OpenConfigGnmiDeviceDescriptionDiscovery() {
         super(GnmiController.class);
-    }
-
-    @Override
-    protected boolean setupBehaviour(String opName) {
-        if (!super.setupBehaviour(opName)) {
-            return false;
-        }
-
-        gnmiController = handler().get(GnmiController.class);
-        return true;
     }
 
     @Override
@@ -106,11 +92,11 @@ public class OpenConfigGnmiDeviceDescriptionDiscovery
 
         final Map<String, DefaultPortDescription.Builder> ports = Maps.newHashMap();
         final Map<String, DefaultAnnotations.Builder> annotations = Maps.newHashMap();
-        final Map<String, PortNumber> portIds = Maps.newHashMap();
 
         // Creates port descriptions with port name and port number
         response.getNotificationList()
                 .forEach(notification -> {
+                    long timestamp = notification.getTimestamp();
                     notification.getUpdateList().forEach(update -> {
                         // /interfaces/interface[name=ifName]/state/...
                         final String ifName = update.getPath().getElem(1)
@@ -121,34 +107,16 @@ public class OpenConfigGnmiDeviceDescriptionDiscovery
                         }
                         final DefaultPortDescription.Builder builder = ports.get(ifName);
                         final DefaultAnnotations.Builder annotationsBuilder = annotations.get(ifName);
-                        parseInterfaceInfo(update, ifName, builder, annotationsBuilder, portIds);
+                        parseInterfaceInfo(update, ifName, builder, annotationsBuilder, timestamp);
                     });
                 });
 
         final List<PortDescription> portDescriptionList = Lists.newArrayList();
         ports.forEach((key, value) -> {
-            // For devices not providing last-change, we set it to 0
-            final DefaultAnnotations.Builder annotationsBuilder = annotations.get(key);
-            if (!annotationsBuilder.build().keys().contains(LAST_CHANGE)) {
-                annotationsBuilder.set(LAST_CHANGE, String.valueOf(0));
-            }
-            /* Override port number if read port-id is enabled
-               and /interfaces/interface/state/id is available */
-            if (readPortId() && portIds.containsKey(key)) {
-                value.withPortNumber(portIds.get(key));
-            }
             DefaultAnnotations annotation = annotations.get(key).build();
             portDescriptionList.add(value.annotations(annotation).build());
         });
-
         return portDescriptionList;
-    }
-
-    private boolean readPortId() {
-        // FIXME temporary solution will be substituted by
-        //  an XML driver property when the transition to
-        //  p4rt translation is completed
-        return ((GnmiControllerImpl) gnmiController).readPortId();
     }
 
     private GetRequest buildPortStateRequest() {
@@ -173,33 +141,23 @@ public class OpenConfigGnmiDeviceDescriptionDiscovery
                                     String ifName,
                                     DefaultPortDescription.Builder builder,
                                     DefaultAnnotations.Builder annotationsBuilder,
-                                    Map<String, PortNumber> portIds) {
+                                    long timestamp) {
+
 
         final Path path = update.getPath();
         final List<PathElem> elems = path.getElemList();
         final Gnmi.TypedValue val = update.getVal();
         if (elems.size() == 4) {
-            /* /interfaces/interface/state/ifindex
-               /interfaces/interface/state/oper-status
-               /interfaces/interface/state/last-change
-               /interfaces/interface/state/id */
+            // /interfaces/interface/state/ifindex
+            // /interfaces/interface/state/oper-status
             final String pathElemName = elems.get(3).getName();
             switch (pathElemName) {
                 case "ifindex": // port number
                     builder.withPortNumber(PortNumber.portNumber(val.getUintVal(), ifName));
-                    annotationsBuilder.set(SDK_PORT, String.valueOf(val.getUintVal()));
                     return;
                 case "oper-status":
                     builder.isEnabled(parseOperStatus(val.getStringVal()));
-                    return;
-                case "last-change":
-                    annotationsBuilder.set(LAST_CHANGE, String.valueOf(val.getUintVal()));
-                    return;
-                case "id":
-                    /* Temporary stored in portIds and eventually substituted
-                       when all updates have been processed. This is done because
-                       there is no guarantee about the order of the updates delivery */
-                    portIds.put(ifName, PortNumber.portNumber(val.getUintVal(), ifName));
+                    annotationsBuilder.set(LAST_CHANGE, String.valueOf(timestamp));
                     return;
                 default:
                     break;

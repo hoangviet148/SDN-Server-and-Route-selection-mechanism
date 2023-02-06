@@ -16,10 +16,8 @@
 package org.onosproject.k8snetworking.impl;
 
 import com.google.common.collect.ImmutableSet;
-import io.fabric8.kubernetes.api.model.FieldsV1;
 import io.fabric8.kubernetes.api.model.LoadBalancerIngress;
 import io.fabric8.kubernetes.api.model.LoadBalancerStatus;
-import io.fabric8.kubernetes.api.model.ManagedFieldsEntry;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.extensions.Ingress;
 import io.fabric8.kubernetes.api.model.extensions.IngressBackend;
@@ -85,8 +83,6 @@ public class DistributedK8sIngressStore
             .register(IngressTLS.class)
             .register(LoadBalancerStatus.class)
             .register(LoadBalancerIngress.class)
-            .register(ManagedFieldsEntry.class)
-            .register(FieldsV1.class)
             .build();
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)

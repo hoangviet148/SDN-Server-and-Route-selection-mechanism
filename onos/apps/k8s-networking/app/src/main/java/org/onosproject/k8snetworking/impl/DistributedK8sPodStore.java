@@ -33,7 +33,6 @@ import io.fabric8.kubernetes.api.model.EnvFromSource;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarSource;
 import io.fabric8.kubernetes.api.model.ExecAction;
-import io.fabric8.kubernetes.api.model.FieldsV1;
 import io.fabric8.kubernetes.api.model.HTTPGetAction;
 import io.fabric8.kubernetes.api.model.HTTPHeader;
 import io.fabric8.kubernetes.api.model.HostPathVolumeSource;
@@ -42,7 +41,6 @@ import io.fabric8.kubernetes.api.model.KeyToPath;
 import io.fabric8.kubernetes.api.model.LabelSelector;
 import io.fabric8.kubernetes.api.model.LabelSelectorRequirement;
 import io.fabric8.kubernetes.api.model.Lifecycle;
-import io.fabric8.kubernetes.api.model.ManagedFieldsEntry;
 import io.fabric8.kubernetes.api.model.NodeAffinity;
 import io.fabric8.kubernetes.api.model.NodeSelector;
 import io.fabric8.kubernetes.api.model.NodeSelectorRequirement;
@@ -66,7 +64,6 @@ import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceFieldSelector;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.SELinuxOptions;
-import io.fabric8.kubernetes.api.model.SeccompProfile;
 import io.fabric8.kubernetes.api.model.SecretEnvSource;
 import io.fabric8.kubernetes.api.model.SecretKeySelector;
 import io.fabric8.kubernetes.api.model.SecretVolumeSource;
@@ -197,15 +194,12 @@ public class DistributedK8sPodStore
             .register(NodeSelectorTerm.class)
             .register(NodeSelectorRequirement.class)
             .register(PreferredSchedulingTerm.class)
-            .register(SeccompProfile.class)
             .register(PodAffinity.class)
             .register(WeightedPodAffinityTerm.class)
             .register(PodAffinityTerm.class)
             .register(LabelSelector.class)
             .register(LabelSelectorRequirement.class)
             .register(PodAntiAffinity.class)
-            .register(ManagedFieldsEntry.class)
-            .register(FieldsV1.class)
             .register(LinkedHashMap.class)
             .register(Collection.class)
             .build();

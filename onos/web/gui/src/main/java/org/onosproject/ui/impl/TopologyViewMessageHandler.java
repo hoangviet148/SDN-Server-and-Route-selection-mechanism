@@ -81,7 +81,7 @@ import java.util.concurrent.ExecutorService;
 import static java.util.concurrent.Executors.newSingleThreadExecutor;
 import static org.onlab.util.Tools.groupedThreads;
 import static org.onosproject.cluster.ClusterEvent.Type.INSTANCE_ADDED;
-import static org.onosproject.net.ConnectPoint.fromString;
+import static org.onosproject.net.ConnectPoint.deviceConnectPoint;
 import static org.onosproject.net.DeviceId.deviceId;
 import static org.onosproject.net.HostId.hostId;
 import static org.onosproject.net.device.DeviceEvent.Type.DEVICE_ADDED;
@@ -113,7 +113,6 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
     private static final String REQ_SEL_INTENT_TRAFFIC = "requestSelectedIntentTraffic";
     private static final String SEL_INTENT = "selectIntent";
     private static final String REQ_ALL_TRAFFIC = "requestAllTraffic";
-    private static final String REQ_CUSTOM_TRAFFIC = "requestCustomTraffic";
     private static final String REQ_DEV_LINK_FLOWS = "requestDeviceLinkFlows";
     private static final String CANCEL_TRAFFIC = "cancelTraffic";
     private static final String REQ_SUMMARY = "requestSummary";
@@ -173,6 +172,7 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
 
     private static final String SLASH = "/";
 
+    private static final long TRAFFIC_PERIOD = 5000;
     private static final long SUMMARY_PERIOD = 30000;
 
     private static final Comparator<? super ControllerNode> NODE_COMPARATOR =
@@ -213,8 +213,8 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
     public void init(UiConnection connection, ServiceDirectory directory) {
         super.init(connection, directory);
         appId = directory.get(CoreService.class).registerApplication(MY_APP_ID);
-        traffic = new TrafficMonitor(services, this);
-        protectedIntentMonitor = new ProtectedIntentMonitor(services, this);
+        traffic = new TrafficMonitor(TRAFFIC_PERIOD, services, this);
+        protectedIntentMonitor = new ProtectedIntentMonitor(TRAFFIC_PERIOD, services, this);
     }
 
     @Override
@@ -246,7 +246,6 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
                 new RemoveIntents(),
 
                 new ReqAllTraffic(),
-                new ReqCustomTraffic(),
                 new ReqDevLinkFlows(),
                 new ReqRelatedIntents(),
                 new ReqNextIntent(),
@@ -394,7 +393,7 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
                 if (isEdgeLink) {
                     HostId hid = hostId(srcId);
                     String cpstr = tgtId + SLASH + string(payload, TARGET_PORT);
-                    ConnectPoint cp = fromString(cpstr);
+                    ConnectPoint cp = deviceConnectPoint(cpstr);
 
                     pp = edgeLinkDetails(hid, cp);
                     overlayCache.currentOverlay().modifyEdgeLinkDetails(pp, hid, cp);
@@ -402,8 +401,8 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
                 } else {
                     String cpAstr = srcId + SLASH + string(payload, SOURCE_PORT);
                     String cpBstr = tgtId + SLASH + string(payload, TARGET_PORT);
-                    ConnectPoint cpA = fromString(cpAstr);
-                    ConnectPoint cpB = fromString(cpBstr);
+                    ConnectPoint cpA = deviceConnectPoint(cpAstr);
+                    ConnectPoint cpB = deviceConnectPoint(cpBstr);
 
                     pp = infraLinkDetails(cpA, cpB);
                     overlayCache.currentOverlay().modifyInfraLinkDetails(pp, cpA, cpB);
@@ -621,17 +620,6 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
                 default:
                     break;
             }
-        }
-    }
-
-    private final class ReqCustomTraffic extends RequestHandler {
-        private ReqCustomTraffic() {
-            super(REQ_CUSTOM_TRAFFIC);
-        }
-
-        @Override
-        public void process(ObjectNode payload) {
-            traffic.monitor((int) number(payload, "index"));
         }
     }
 
@@ -922,11 +910,7 @@ public class TopologyViewMessageHandler extends TopologyViewMessageHandlerBase {
     private class InternalClusterListener implements ClusterEventListener {
         @Override
         public void event(ClusterEvent event) {
-            msgSender.execute(() -> {
-                if (event.instanceType() == ClusterEvent.InstanceType.ONOS) {
-                    sendMessage(instanceMessage(event, null));
-                }
-            });
+            msgSender.execute(() -> sendMessage(instanceMessage(event, null)));
         }
     }
 

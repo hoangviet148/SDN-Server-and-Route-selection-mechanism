@@ -59,49 +59,18 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.core.IsNull.notNullValue;
-import static org.hamcrest.core.IsNull.nullValue;
 
 /**
  * Test for P4Info Parser.
  */
 public class P4InfoParserTest {
     private static final String PATH = "basic.p4info";
-    private static final String PATH2 = "test_p4runtime_translation_p4info.txt";
 
     private final URL p4InfoUrl = P4InfoParserTest.class.getResource(PATH);
-    private final URL p4InfoUrl2 = P4InfoParserTest.class.getResource(PATH2);
 
     private static final Long DEFAULT_MAX_TABLE_SIZE = 1024L;
     private static final Long DEFAULT_MAX_ACTION_PROFILE_SIZE = 64L;
     private static final int DEFAULT_MAX_GROUP_SIZE = 16;
-
-    /**
-     * Tests the parsing of the architecture field.
-     * @throws Exception if the equality group objects does not match expected
-     */
-    @Test
-    public void testParseArchitecture() throws Exception {
-        // Generate two PiPipelineModels from the same p4Info file
-        PiPipelineModel model = P4InfoParser.parse(p4InfoUrl);
-        PiPipelineModel sameAsModel = P4InfoParser.parse(p4InfoUrl);
-
-        PiPipelineModel model3 = P4InfoParser.parse(p4InfoUrl2);
-
-        String architecture1 = model.architecture().orElse(null);
-        String architecture2 = sameAsModel.architecture().orElse(null);
-
-        assertThat("null value is returned if `arch` not present in P4Info",
-                   architecture1,
-                   is(nullValue()));
-        assertThat("null value is returned if `arch` not present in P4Info",
-                   architecture2,
-                   is(nullValue()));
-
-        String architecture3 = model3.architecture().orElse(null);
-        assertThat("test that `arch` field is correctly parsed",
-                   architecture3,
-                   is("v1model"));
-    }
 
     /**
      * Tests parse method.
@@ -109,12 +78,12 @@ public class P4InfoParserTest {
      */
     @Test
     public void testParse() throws Exception {
-        // Generate two PiPipelineModels from the same p4Info file
+        // Generate two PiPipelineModels from p4Info file
         PiPipelineModel model = P4InfoParser.parse(p4InfoUrl);
-        PiPipelineModel sameAsModel = P4InfoParser.parse(p4InfoUrl);
+        PiPipelineModel model2 = P4InfoParser.parse(p4InfoUrl);
 
         // Check equality
-        new EqualsTester().addEqualityGroup(model, sameAsModel).testEquals();
+        new EqualsTester().addEqualityGroup(model, model2).testEquals();
 
         // Generate a P4Info object from the file
         final P4Info p4info;
@@ -123,34 +92,30 @@ public class P4InfoParserTest {
         } catch (IOException e) {
             throw new P4InfoParserException("Unable to parse protobuf " + p4InfoUrl.toString(), e);
         }
+
         List<Table> tableMsgs =  p4info.getTablesList();
         PiTableId table0Id = PiTableId.of(tableMsgs.get(0).getPreamble().getName());
         PiTableId wcmpTableId = PiTableId.of(tableMsgs.get(1).getPreamble().getName());
-        PiTableId wcmpTableOneShotId = PiTableId.of(tableMsgs.get(2).getPreamble().getName());
+
         //parse tables
         PiTableModel table0Model = model.table(table0Id).orElse(null);
         PiTableModel wcmpTableModel = model.table(wcmpTableId).orElse(null);
-        PiTableModel wcmpTableOneShotModel = model.table(wcmpTableOneShotId).orElse(null);
-        PiTableModel table0Model2 = sameAsModel.table(table0Id).orElse(null);
-        PiTableModel wcmpTableModel2 = sameAsModel.table(wcmpTableId).orElse(null);
+        PiTableModel table0Model2 = model2.table(table0Id).orElse(null);
+        PiTableModel wcmpTableModel2 = model2.table(wcmpTableId).orElse(null);
 
         new EqualsTester().addEqualityGroup(table0Model, table0Model2)
                 .addEqualityGroup(wcmpTableModel, wcmpTableModel2).testEquals();
+
         // Check existence
         assertThat("model parsed value is null", table0Model, notNullValue());
         assertThat("model parsed value is null", wcmpTableModel, notNullValue());
-        assertThat("model parsed value is null", wcmpTableOneShotModel, notNullValue());
         assertThat("Incorrect size for table0 size", table0Model.maxSize(), is(equalTo(DEFAULT_MAX_TABLE_SIZE)));
         assertThat("Incorrect size for wcmp_table size", wcmpTableModel.maxSize(), is(equalTo(DEFAULT_MAX_TABLE_SIZE)));
-        assertThat("Incorrect size for wcmp_table_one_shot size", wcmpTableOneShotModel.maxSize(),
-                   is(equalTo(DEFAULT_MAX_TABLE_SIZE)));
-        // Check one-shot annotation
-        assertThat("error parsing one-shot annotation", wcmpTableModel.oneShotOnly(), is(false));
-        assertThat("error parsing one-shot annotation", wcmpTableOneShotModel.oneShotOnly(), is(true));
 
         // Check matchFields
         List<MatchField> matchFieldList = tableMsgs.get(0).getMatchFieldsList();
         List<PiMatchFieldModel> piMatchFieldList = new ArrayList<>();
+
         for (MatchField matchFieldIter : matchFieldList) {
             MatchField.MatchType matchType = matchFieldIter.getMatchType();
             PiMatchType piMatchType;
@@ -173,16 +138,20 @@ public class P4InfoParserTest {
                 piMatchFieldList.get(4), piMatchFieldList.get(5),
                 piMatchFieldList.get(6), piMatchFieldList.get(7),
                 piMatchFieldList.get(8)));
+
         assertThat("Incorrect size for matchFields", wcmpTableModel.matchFields().size(), is(equalTo(1)));
+
         // check if matchFields are in order
         matchFieldList = tableMsgs.get(1).getMatchFieldsList();
         assertThat("Incorrect order for matchFields",
                    wcmpTableModel.matchFields(), IsIterableContainingInOrder.contains(
                         new P4MatchFieldModel(PiMatchFieldId.of(matchFieldList.get(0).getName()),
                                               matchFieldList.get(0).getBitwidth(), PiMatchType.EXACT)));
+
         //check table0 actionsRefs
         List<ActionRef> actionRefList = tableMsgs.get(0).getActionRefsList();
         assertThat("Incorrect size for actionRefs", actionRefList.size(), is(equalTo(4)));
+
         //create action instances
         PiActionId actionId = PiActionId.of("set_egress_port");
         PiActionParamId piActionParamId = PiActionParamId.of("port");
@@ -197,12 +166,15 @@ public class P4InfoParserTest {
         actionId = PiActionId.of("send_to_cpu");
         PiActionModel sendToCpuAction =
                 new P4ActionModel(actionId, new ImmutableMap.Builder<PiActionParamId, PiActionParamModel>().build());
+
         actionId = PiActionId.of("_drop");
         PiActionModel dropAction =
                 new P4ActionModel(actionId, new ImmutableMap.Builder<PiActionParamId, PiActionParamModel>().build());
+
         actionId = PiActionId.of("NoAction");
         PiActionModel noAction =
                 new P4ActionModel(actionId, new ImmutableMap.Builder<PiActionParamId, PiActionParamModel>().build());
+
         actionId = PiActionId.of("table0_control.set_next_hop_id");
         piActionParamId = PiActionParamId.of("next_hop_id");
         bitWitdth = 16;
@@ -216,6 +188,7 @@ public class P4InfoParserTest {
         assertThat("action dose not match",
                    table0Model.actions(), IsIterableContainingInAnyOrder.containsInAnyOrder(
                         setEgressPortAction, sendToCpuAction, setNextHopIdAction, dropAction));
+
         //check wcmp_table actions
         assertThat("actions dose not match",
                    wcmpTableModel.actions(), IsIterableContainingInAnyOrder.containsInAnyOrder(
@@ -236,7 +209,7 @@ public class P4InfoParserTest {
                                                                       true, DEFAULT_MAX_ACTION_PROFILE_SIZE,
                                                                       DEFAULT_MAX_GROUP_SIZE);
         PiActionProfileModel wcmpSelector = model.actionProfiles(actionProfileId).orElse(null);
-        PiActionProfileModel wcmpSelector2 = sameAsModel.actionProfiles(actionProfileId).orElse(null);
+        PiActionProfileModel wcmpSelector2 = model2.actionProfiles(actionProfileId).orElse(null);
 
         new EqualsTester().addEqualityGroup(wcmpSelector, wcmpSelector2, wcmpSelector3).testEquals();
 
@@ -257,13 +230,13 @@ public class P4InfoParserTest {
                 model.counter(PiCounterId.of("wcmp_control.wcmp_table_counter")).orElse(null);
 
         PiCounterModel ingressPortCounterModel2 =
-                sameAsModel.counter(PiCounterId.of("port_counters_ingress.ingress_port_counter")).orElse(null);
+                model2.counter(PiCounterId.of("port_counters_ingress.ingress_port_counter")).orElse(null);
         PiCounterModel egressPortCounterModel2 =
-                sameAsModel.counter(PiCounterId.of("port_counters_egress.egress_port_counter")).orElse(null);
+                model2.counter(PiCounterId.of("port_counters_egress.egress_port_counter")).orElse(null);
         PiCounterModel table0CounterModel2 =
-                sameAsModel.counter(PiCounterId.of("table0_control.table0_counter")).orElse(null);
+                model2.counter(PiCounterId.of("table0_control.table0_counter")).orElse(null);
         PiCounterModel wcmpTableCounterModel2 =
-                sameAsModel.counter(PiCounterId.of("wcmp_control.wcmp_table_counter")).orElse(null);
+                model2.counter(PiCounterId.of("wcmp_control.wcmp_table_counter")).orElse(null);
 
         new EqualsTester()
                 .addEqualityGroup(ingressPortCounterModel, ingressPortCounterModel2)
@@ -279,10 +252,10 @@ public class P4InfoParserTest {
 
         //Parse meters
         Collection<PiMeterModel> meterModel = model.meters();
-        Collection<PiMeterModel> meterModel2 = sameAsModel.meters();
+        Collection<PiMeterModel> meterModel2 = model2.meters();
 
-        assertThat("model parsed meter collection should be empty", meterModel.isEmpty(), is(true));
-        assertThat("model parsed meter collection should be empty", meterModel2.isEmpty(), is(true));
+        assertThat("model pased meter collaction should be empty", meterModel.isEmpty(), is(true));
+        assertThat("model pased meter collaction should be empty", meterModel2.isEmpty(), is(true));
 
         //parse packet operations
         PiPacketOperationModel packetInOperationalModel =
@@ -291,9 +264,9 @@ public class P4InfoParserTest {
                 model.packetOperationModel(PiPacketOperationType.PACKET_OUT).orElse(null);
 
         PiPacketOperationModel packetInOperationalModel2 =
-                sameAsModel.packetOperationModel(PiPacketOperationType.PACKET_IN).orElse(null);
+                model2.packetOperationModel(PiPacketOperationType.PACKET_IN).orElse(null);
         PiPacketOperationModel packetOutOperationalModel2 =
-                sameAsModel.packetOperationModel(PiPacketOperationType.PACKET_OUT).orElse(null);
+                model2.packetOperationModel(PiPacketOperationType.PACKET_OUT).orElse(null);
 
         new EqualsTester()
                 .addEqualityGroup(packetInOperationalModel, packetInOperationalModel2)
@@ -303,97 +276,6 @@ public class P4InfoParserTest {
         // Check existence
         assertThat("model parsed value is null", packetInOperationalModel, notNullValue());
         assertThat("model parsed value is null", packetOutOperationalModel, notNullValue());
-    }
-
-    /**
-     * Tests parse method with P4Runtime translation fields and optional fields.
-     * @throws Exception if equality group objects dose not match as expected
-     */
-    @Test
-    public void testParseP4RuntimeTranslationAndOptional() throws Exception {
-        PiPipelineModel model = P4InfoParser.parse(p4InfoUrl2);
-        // Generate a P4Info object from the file
-        final P4Info p4info;
-        try {
-            p4info = getP4InfoMessage(p4InfoUrl2);
-        } catch (IOException e) {
-            throw new P4InfoParserException("Unable to parse protobuf " + p4InfoUrl.toString(), e);
-        }
-        List<Table> tableMsgs =  p4info.getTablesList();
-        PiTableId table0Id = PiTableId.of(tableMsgs.get(0).getPreamble().getName());
-
-        //parse tables
-        PiTableModel table0Model = model.table(table0Id).orElse(null);
-
-        // Check matchFields
-        List<MatchField> matchFieldList = tableMsgs.get(0).getMatchFieldsList();
-        List<PiMatchFieldModel> piMatchFieldList = new ArrayList<>();
-
-        for (MatchField matchFieldIter : matchFieldList) {
-            MatchField.MatchType matchType = matchFieldIter.getMatchType();
-            PiMatchType piMatchType;
-            switch (matchType) {
-                case EXACT: piMatchType = PiMatchType.EXACT; break;
-                case LPM: piMatchType = PiMatchType.LPM; break;
-                case TERNARY: piMatchType = PiMatchType.TERNARY; break;
-                case RANGE: piMatchType = PiMatchType.RANGE; break;
-                case OPTIONAL: piMatchType = PiMatchType.OPTIONAL; break;
-                default: Assert.fail(); return;
-            }
-            if (matchFieldIter.getTypeName().getName().equals("mac_addr_t")) {
-                piMatchFieldList.add(new P4MatchFieldModel(PiMatchFieldId.of(matchFieldIter.getName()),
-                                                           P4MatchFieldModel.BIT_WIDTH_UNDEFINED, piMatchType));
-            } else {
-                piMatchFieldList.add(new P4MatchFieldModel(PiMatchFieldId.of(matchFieldIter.getName()),
-                                                           matchFieldIter.getBitwidth(), piMatchType));
-            }
-        }
-        assertThat("Incorrect order for matchFields",
-                   table0Model.matchFields(),
-                   IsIterableContainingInOrder.contains(
-                           piMatchFieldList.get(0), piMatchFieldList.get(1),
-                           piMatchFieldList.get(2), piMatchFieldList.get(3)));
-
-        //check table0 actionsRefs
-        List<ActionRef> actionRefList = tableMsgs.get(0).getActionRefsList();
-        assertThat("Incorrect size for actionRefs",
-                   actionRefList.size(),
-                   is(equalTo(4)));
-
-        //create action instances
-        // Set egress with string as parameter
-        PiActionId actionId = PiActionId.of("set_egress_port");
-        PiActionParamId piActionParamId = PiActionParamId.of("port");
-        PiActionParamModel actionParamModel = new P4ActionParamModel(
-                piActionParamId, P4ActionParamModel.BIT_WIDTH_UNDEFINED);
-        ImmutableMap<PiActionParamId, PiActionParamModel> params = new
-                ImmutableMap.Builder<PiActionParamId, PiActionParamModel>()
-                .put(piActionParamId, actionParamModel).build();
-        PiActionModel setEgressPortAction = new P4ActionModel(actionId, params);
-
-        // Set egress with 32 bit as parameter
-        actionId = PiActionId.of("set_egress_port2");
-        piActionParamId = PiActionParamId.of("port");
-        int bitWitdth = 32;
-        actionParamModel = new P4ActionParamModel(
-                piActionParamId, bitWitdth);
-        params = new ImmutableMap.Builder<PiActionParamId, PiActionParamModel>()
-                .put(piActionParamId, actionParamModel).build();
-
-        PiActionModel setEgressPortAction2 = new P4ActionModel(actionId, params);
-
-        actionId = PiActionId.of("send_to_cpu");
-        PiActionModel sendToCpuAction =
-                new P4ActionModel(actionId, new ImmutableMap.Builder<PiActionParamId, PiActionParamModel>().build());
-
-        actionId = PiActionId.of("drop");
-        PiActionModel dropAction =
-                new P4ActionModel(actionId, new ImmutableMap.Builder<PiActionParamId, PiActionParamModel>().build());
-
-        //check table0 actions
-        assertThat("action dose not match",
-                   table0Model.actions(), IsIterableContainingInAnyOrder.containsInAnyOrder(
-                        setEgressPortAction, setEgressPortAction2, sendToCpuAction, dropAction));
     }
 
     /**

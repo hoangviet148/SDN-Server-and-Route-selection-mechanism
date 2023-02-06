@@ -27,7 +27,6 @@ import org.onlab.util.ItemNotFoundException;
 import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterService;
-import org.onosproject.core.ApplicationId;
 import org.onosproject.net.Device;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.behaviour.NextGroup;
@@ -119,12 +118,13 @@ public class FlowObjectiveManager implements FlowObjectiveService {
     // its own accumulation logic. The following parameters are used
     // to control the accumulator.
 
-    /** Max number of objs to accumulate before processing is triggered. */
+    // Maximum number of objectives to accumulate before processing is triggered
     private int accumulatorMaxObjectives = FOM_ACCUMULATOR_MAX_OBJECTIVES_DEFAULT;
-    /** Max of ms between objs before processing is triggered. */
+    // Maximum number of millis between objectives before processing is triggered
     private int accumulatorMaxIdleMillis = FOM_ACCUMULATOR_MAX_IDLE_MILLIS_DEFAULT;
-    /** Max number of ms allowed since the first obj before processing is triggered. */
+    // Maximum number of millis allowed since the first objective before processing is triggered
     private int accumulatorMaxBatchMillis = FOM_ACCUMULATOR_MAX_BATCH_MILLIS_DEFAULT;
+
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected DriverService driverService;
@@ -224,7 +224,7 @@ public class FlowObjectiveManager implements FlowObjectiveService {
      *
      * @param context the component context
      */
-    protected void readComponentConfiguration(ComponentContext context) {
+    private void readComponentConfiguration(ComponentContext context) {
         String propertyValue = Tools.get(context.getProperties(), FOM_NUM_THREADS);
         int newNumThreads = isNullOrEmpty(propertyValue) ? numThreads : Integer.parseInt(propertyValue);
 
@@ -834,35 +834,5 @@ public class FlowObjectiveManager implements FlowObjectiveService {
         }
 
         return pendingFlowObjectives;
-    }
-
-    @Override
-    public void purgeAll(DeviceId deviceId, ApplicationId appId) {
-        synchronized (pendingForwards) {
-            List<Integer> emptyPendingForwards = Lists.newArrayList();
-            pendingForwards.forEach((nextId, pendingObjectives) -> {
-                pendingObjectives.removeIf(pendingFlowObjective -> pendingFlowObjective.deviceId().equals(deviceId));
-                if (pendingObjectives.isEmpty()) {
-                    emptyPendingForwards.add(nextId);
-                }
-            });
-            emptyPendingForwards.forEach(pendingForwards::remove);
-        }
-        synchronized (pendingNexts) {
-            List<Integer> emptyPendingNexts = Lists.newArrayList();
-            pendingNexts.forEach((nextId, pendingObjectives) -> {
-                pendingObjectives.removeIf(pendingFlowObjective -> pendingFlowObjective.deviceId().equals(deviceId));
-                if (pendingObjectives.isEmpty()) {
-                    emptyPendingNexts.add(nextId);
-                }
-            });
-            emptyPendingNexts.forEach(pendingNexts::remove);
-        }
-        Pipeliner pipeliner = getDevicePipeliner(deviceId);
-        if (pipeliner != null) {
-            pipeliner.purgeAll(appId);
-        } else {
-            log.warn("Skip purgeAll, pipeliner not ready!");
-        }
     }
 }

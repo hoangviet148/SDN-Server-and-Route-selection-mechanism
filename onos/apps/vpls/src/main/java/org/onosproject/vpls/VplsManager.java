@@ -16,7 +16,6 @@
 package org.onosproject.vpls;
 
 import com.google.common.collect.ImmutableSet;
-import org.onosproject.codec.CodecService;
 import org.onosproject.net.EncapsulationType;
 import org.onosproject.net.Host;
 import org.onosproject.net.host.HostEvent;
@@ -30,7 +29,6 @@ import org.onosproject.vpls.api.VplsData;
 import org.onosproject.vpls.api.VplsOperation;
 import org.onosproject.vpls.api.VplsOperationService;
 import org.onosproject.vpls.api.VplsStore;
-import org.onosproject.vpls.rest.VplsCodec;
 import org.onosproject.vpls.store.VplsStoreEvent;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -67,12 +65,8 @@ public class VplsManager implements Vpls {
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     protected VplsOperationService operationService;
 
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    protected CodecService codecService;
-
     private StoreDelegate<VplsStoreEvent> vplsStoreDelegate;
     private HostListener vplsHostListener;
-
 
     @Activate
     public void activate() {
@@ -81,14 +75,12 @@ public class VplsManager implements Vpls {
 
         vplsStore.setDelegate(vplsStoreDelegate);
         hostService.addListener(vplsHostListener);
-        codecService.registerCodec(VplsData.class, new VplsCodec());
     }
 
     @Deactivate
     public void deactivate() {
         vplsStore.unsetDelegate(vplsStoreDelegate);
         hostService.removeListener(vplsHostListener);
-        codecService.unregisterCodec(VplsData.class);
     }
 
     @Override

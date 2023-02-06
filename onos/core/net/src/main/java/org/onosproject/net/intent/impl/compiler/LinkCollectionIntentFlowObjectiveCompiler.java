@@ -123,8 +123,7 @@ public class LinkCollectionIntentFlowObjectiveCompiler
         if (encapConstraint.isPresent()) {
             labels = labelAllocator.assignLabelToPorts(intent.links(),
                                                        intent.key(),
-                                                       encapConstraint.get().encapType(),
-                                                       encapConstraint.get().suggestedIdentifier());
+                                                       encapConstraint.get().encapType());
         }
 
         ImmutableList.Builder<Intent> intentList = ImmutableList.builder();

@@ -40,12 +40,10 @@ import org.onosproject.net.pi.model.PiTableModel;
 import org.onosproject.net.pi.model.PiTableType;
 import org.onosproject.net.pi.runtime.PiAction;
 import org.onosproject.net.pi.runtime.PiActionParam;
-import org.onosproject.net.pi.runtime.PiActionSet;
 import org.onosproject.net.pi.runtime.PiExactFieldMatch;
 import org.onosproject.net.pi.runtime.PiFieldMatch;
 import org.onosproject.net.pi.runtime.PiLpmFieldMatch;
 import org.onosproject.net.pi.runtime.PiMatchKey;
-import org.onosproject.net.pi.runtime.PiOptionalFieldMatch;
 import org.onosproject.net.pi.runtime.PiRangeFieldMatch;
 import org.onosproject.net.pi.runtime.PiTableAction;
 import org.onosproject.net.pi.runtime.PiTableEntry;
@@ -116,8 +114,7 @@ final class PiFlowRuleTranslatorImpl {
             // Need to ignore priority if no TCAM lookup match field
             needPriority = tableModel.matchFields().stream()
                     .anyMatch(match -> match.matchType() == PiMatchType.TERNARY ||
-                            match.matchType() == PiMatchType.RANGE ||
-                            match.matchType() == PiMatchType.OPTIONAL);
+                            match.matchType() == PiMatchType.RANGE);
         }
         // Translate treatment.
         final PiTableAction piTableAction = translateTreatment(rule.treatment(), interpreter, piTableId, pipelineModel);
@@ -148,7 +145,7 @@ final class PiFlowRuleTranslatorImpl {
 
         if (!rule.isPermanent()) {
             if (tableModel.supportsAging()) {
-                tableEntryBuilder.withTimeout(rule.timeout());
+                tableEntryBuilder.withTimeout((double) rule.timeout());
             } else {
                 log.debug("Flow rule is temporary, but table '{}' doesn't support " +
                                   "aging, translating to permanent.", tableModel.id());
@@ -235,28 +232,19 @@ final class PiFlowRuleTranslatorImpl {
         switch (piTableAction.type()) {
             case ACTION:
                 return checkPiAction((PiAction) piTableAction, table);
-            case ACTION_SET:
-                for (var actProfAct : ((PiActionSet) piTableAction).actions()) {
-                    checkPiAction(actProfAct.action(), table);
-                }
             case ACTION_PROFILE_GROUP_ID:
-                if (table.actionProfile() == null || !table.actionProfile().hasSelector()) {
-                    throw new PiTranslationException(format(
-                            "action is of type '%s', but table '%s' does not" +
-                                    "implement an action profile with dynamic selection",
-                            piTableAction.type(), table.id()));
-                }
             case ACTION_PROFILE_MEMBER_ID:
                 if (!table.tableType().equals(PiTableType.INDIRECT)) {
                     throw new PiTranslationException(format(
                             "action is indirect of type '%s', but table '%s' is of type '%s'",
                             piTableAction.type(), table.id(), table.tableType()));
                 }
-                if (!piTableAction.type().equals(PiTableAction.Type.ACTION_SET) &&
-                        table.oneShotOnly()) {
+                if (piTableAction.type().equals(PiTableAction.Type.ACTION_PROFILE_GROUP_ID)
+                        && (table.actionProfile() == null || !table.actionProfile().hasSelector())) {
                     throw new PiTranslationException(format(
-                            "table '%s' supports only one shot programming", table.id()
-                    ));
+                            "action is of type '%s', but table '%s' does not" +
+                                    "implement an action profile with dynamic selection",
+                            piTableAction.type(), table.id()));
                 }
                 return piTableAction;
             default:
@@ -289,9 +277,7 @@ final class PiFlowRuleTranslatorImpl {
                             "Not such parameter '%s' for action '%s'", param.id(), actionModel)));
             try {
                 newActionBuilder.withParameter(new PiActionParam(param.id(),
-                                                                 paramModel.hasBitWidth() ?
-                                                                         param.value().fit(paramModel.bitWidth()) :
-                                                                         param.value()));
+                                                                 param.value().fit(paramModel.bitWidth())));
             } catch (ByteSequenceTrimException e) {
                 throw new PiTranslationException(format(
                         "Size mismatch for parameter '%s' of action '%s': %s",
@@ -369,14 +355,13 @@ final class PiFlowRuleTranslatorImpl {
 
             if (!piCriterionFields.containsKey(fieldId) && criterion == null) {
                 // Neither a field in PiCriterion is available nor a Criterion mapping is possible.
-                // Can ignore if match is ternary-like, as it means "don't care".
+                // Can ignore if the match is ternary or LPM.
                 switch (fieldModel.matchType()) {
                     case TERNARY:
                     case LPM:
-                    case RANGE:
-                    case OPTIONAL:
                         // Skip field.
                         break;
+                    // FIXME: Can we handle the case of RANGE or VALID match?
                     default:
                         throw new PiTranslationException(format(
                                 "No value found for required match field '%s'", fieldId));
@@ -387,8 +372,7 @@ final class PiFlowRuleTranslatorImpl {
 
             PiFieldMatch fieldMatch = null;
 
-            // TODO: we currently do not support fields with arbitrary bit width
-            if (criterion != null && fieldModel.hasBitWidth()) {
+            if (criterion != null) {
                 // Criterion mapping is possible for this field id.
                 try {
                     fieldMatch = translateCriterion(criterion, fieldId, fieldModel.matchType(), bitWidth);
@@ -460,15 +444,6 @@ final class PiFlowRuleTranslatorImpl {
                     fieldMatch.fieldId(), fieldModel.matchType().name(), fieldMatch.type().name()));
         }
 
-        // Check if the arbitrary bit width is supported
-        if (!fieldModel.hasBitWidth() &&
-                !fieldModel.matchType().equals(PiMatchType.EXACT) &&
-                !fieldModel.matchType().equals(PiMatchType.OPTIONAL)) {
-            throw new PiTranslationException(format(
-                    "Arbitrary bit width for field '%s' and match type %s is not supported",
-                    fieldMatch.fieldId(), fieldModel.matchType().name()));
-        }
-
         int modelBitWidth = fieldModel.bitWidth();
 
         /*
@@ -483,11 +458,8 @@ final class PiFlowRuleTranslatorImpl {
         try {
             switch (fieldModel.matchType()) {
                 case EXACT:
-                    PiExactFieldMatch exactField = (PiExactFieldMatch) fieldMatch;
                     return new PiExactFieldMatch(fieldMatch.fieldId(),
-                                                 fieldModel.hasBitWidth() ?
-                                                         exactField.value().fit(modelBitWidth) :
-                                                         exactField.value());
+                                                 ((PiExactFieldMatch) fieldMatch).value().fit(modelBitWidth));
                 case TERNARY:
                     PiTernaryFieldMatch ternField = (PiTernaryFieldMatch) fieldMatch;
                     ImmutableByteSequence ternMask = ternField.mask().fit(modelBitWidth);
@@ -513,12 +485,6 @@ final class PiFlowRuleTranslatorImpl {
                     return new PiRangeFieldMatch(fieldMatch.fieldId(),
                                                  ((PiRangeFieldMatch) fieldMatch).lowValue().fit(modelBitWidth),
                                                  ((PiRangeFieldMatch) fieldMatch).highValue().fit(modelBitWidth));
-                case OPTIONAL:
-                    PiOptionalFieldMatch optionalField = (PiOptionalFieldMatch) fieldMatch;
-                    return new PiOptionalFieldMatch(fieldMatch.fieldId(),
-                                                    fieldModel.hasBitWidth() ?
-                                                            optionalField.value().fit(modelBitWidth) :
-                                                            optionalField.value());
                 default:
                     // Should never be here.
                     throw new IllegalArgumentException(

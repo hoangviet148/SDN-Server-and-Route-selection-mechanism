@@ -37,6 +37,7 @@ The following packages are required:
 * zip
 * curl
 * unzip
+* python2.7
 * python3 (needed by Bazel)
 
 ### Build ONOS from source
@@ -135,7 +136,8 @@ through pull requests on GitHub.
 
 To contribute to ONOS, please refer to [Sample Gerrit
 Workflow](https://wiki.onosproject.org/display/ONOS/Sample+Gerrit+Workflow). It
-should include most of the things you'll need to get your contribution started!
+should includes most of the things you'll need to get your contribution started!
+
 
 ## More information
 
@@ -149,10 +151,3 @@ For more information, please check out our wiki page or mailing lists:
 
 ONOS (Open Network Operating System) is published under [Apache License
 2.0](https://github.com/opennetworkinglab/onos/blob/master/LICENSE.txt)
-
-## Acknowledgements
-YourKit supports open source projects with innovative and intelligent tools
-for monitoring and profiling Java and .NET applications.
-YourKit is the creator of [YourKit Java Profiler](https://www.yourkit.com/java/profiler/), [YourKit .NET Profiler](https://www.yourkit.com/.net/profiler/) and [YourKit YouMonitor](https://www.yourkit.com/youmonitor/).
-
-![YourKit](https://www.yourkit.com/images/yklogo.png)

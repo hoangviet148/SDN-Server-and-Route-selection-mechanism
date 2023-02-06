@@ -2,16 +2,13 @@ COMPILE_DEPS = CORE_DEPS + [
     "//drivers/p4runtime:onos-drivers-p4runtime",
 ]
 
-TEST_DEPS = TEST_ADAPTERS
-
 BUNDLES = [
     ":onos-drivers-barefoot",
 ]
 
-osgi_jar_with_tests(
+osgi_jar(
     resources = glob(["src/main/resources/**"]),
     resources_root = "src/main/resources",
-    test_deps = TEST_DEPS,
     deps = COMPILE_DEPS,
 )
 

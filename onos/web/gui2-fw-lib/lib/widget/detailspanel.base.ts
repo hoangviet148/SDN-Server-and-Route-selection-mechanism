@@ -18,7 +18,7 @@ import { LogService } from '../log.service';
 import { WebSocketService } from '../remote/websocket.service';
 
 import { PanelBaseImpl } from './panel.base';
-import { InjectionToken, Inject, Component, Output, EventEmitter, Input } from '@angular/core';
+import { Output, EventEmitter, Input } from '@angular/core';
 
 /**
  * A generic model of the data returned from the *DetailsResponse
@@ -26,8 +26,6 @@ import { InjectionToken, Inject, Component, Output, EventEmitter, Input } from '
 export interface DetailsResponse {
     details: any;
 }
-
-export const TAG = new InjectionToken<string>('tag');
 
 /**
  * Extends the PanelBase abstract class specifically for showing details
@@ -37,9 +35,6 @@ export const TAG = new InjectionToken<string>('tag');
  *
  * This replaces the detailspanel service in the old gui
  */
-@Component({
-    template: ''
-})
 export abstract class DetailsPanelBaseImpl extends PanelBaseImpl {
 
     @Input() id: string;
@@ -56,7 +51,7 @@ export abstract class DetailsPanelBaseImpl extends PanelBaseImpl {
         protected fs: FnService,
         protected log: LogService,
         protected wss: WebSocketService,
-        @Inject(TAG) protected tag: string,
+        protected tag: string,
     ) {
         super(fs, log);
         this.root = tag + 's';

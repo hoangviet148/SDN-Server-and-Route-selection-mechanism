@@ -94,6 +94,7 @@ public class DistributedMcastRoutesStore
     @Deactivate
     public void deactivate() {
         mcastRib.removeListener(mcastRouteListener);
+        mcastRib.destroy();
         log.info("Stopped");
     }
 
@@ -140,14 +141,6 @@ public class DistributedMcastRoutesStore
             v.removeSource(source);
             // Since there are no sources, we should remove the route
             return v.sources().isEmpty() ? null : v;
-        });
-    }
-
-    @Override
-    public void removeSources(McastRoute route, Set<ConnectPoint> sources) {
-        mcastRoutes.compute(route, (k, v) -> {
-            v.removeSources(HostId.NONE, sources);
-            return v;
         });
     }
 

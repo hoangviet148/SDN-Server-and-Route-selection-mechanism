@@ -85,7 +85,6 @@ def _bnd_impl(ctx):
     web_xml = ctx.attr.web_xml
     dynamicimportPackages = ""
     karaf_commands = ctx.attr.karaf_commands
-    fragment_host = ctx.attr.fragment_host
     cp = ""
 
     inputDependencies = [input_file]
@@ -123,9 +122,6 @@ def _bnd_impl(ctx):
         "classes",
         bundle_classpath,
         karaf_commands,
-        fragment_host,
-        # enable/disable osgi-wrap logging
-        "false",
     ]
 
     ctx.actions.run(
@@ -159,7 +155,6 @@ _bnd = rule(
         "web_xml": attr.label_list(allow_files = True),
         "include_resources": attr.string(),
         "karaf_commands": attr.string(),
-        "fragment_host": attr.string(),
         "_bnd_exe": attr.label(
             executable = True,
             cfg = "host",
@@ -371,8 +366,7 @@ def wrapped_osgi_jar(
         group = "org.onosproject",
         import_packages = "*",
         visibility = ["//visibility:private"],
-        generate_pom = False,
-        fragment_host = ""):
+        generate_pom = False):
     _bnd(
         name = name,
         source = jar,
@@ -382,7 +376,6 @@ def wrapped_osgi_jar(
         visibility = visibility,
         import_packages = import_packages,
         web_xml = None,
-        fragment_host = fragment_host,
     )
 
     if generate_pom:
@@ -509,7 +502,7 @@ def osgi_jar_with_tests(
         native.java_library(
             name = name + "-native",
             srcs = native_srcs,
-            resources = resource_jars + [name + "_cfgdef_jar"],
+            resource_jars = resource_jars + [name + "_cfgdef_jar"],
             deps = deps,
             visibility = visibility,
             javacopts = javacopts,
@@ -518,14 +511,13 @@ def osgi_jar_with_tests(
         native.java_library(
             name = name + "-native",
             srcs = native_srcs,
-            resources = native_resources + [name + "_cfgdef_jar"],
+            resource_jars = [name + "_cfgdef_jar"],
+            resources = native_resources,
             deps = deps,
             visibility = visibility,
             javacopts = javacopts,
         )
 
-    # NOTE that the additional resource_jars are modified by
-    # osgi-wrap because java_library does not decompress them.
     karaf_command_packages_string = ",".join(karaf_command_packages)
     _bnd(
         name = name,

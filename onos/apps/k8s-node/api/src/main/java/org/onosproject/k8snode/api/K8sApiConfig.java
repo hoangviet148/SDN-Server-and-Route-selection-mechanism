@@ -16,9 +16,6 @@
 package org.onosproject.k8snode.api;
 
 import org.onlab.packet.IpAddress;
-import org.onlab.packet.IpPrefix;
-
-import java.util.Set;
 
 /**
  * Representation of configuration used in kubernetes API server.
@@ -55,46 +52,6 @@ public interface K8sApiConfig {
         DISCONNECTED,
     }
 
-    enum Mode {
-        /**
-         * Signifies that the CNI is running in normal mode.
-         */
-        NORMAL,
-
-        /**
-         * Signifies that the CNI is running in pass-through mode.
-         */
-        PASSTHROUGH,
-    }
-
-    /**
-     * Returns the cluster name.
-     *
-     * @return cluster name
-     */
-    String clusterName();
-
-    /**
-     * Returns cluster short name.
-     *
-     * @return cluster short name
-     */
-    String clusterShortName();
-
-    /**
-     * Returns the segmentation ID.
-     *
-     * @return segmentation ID
-     */
-    int segmentId();
-
-    /**
-     * Returns the external network CIDR.
-     *
-     * @return external network CIDR
-     */
-    IpPrefix extNetworkCidr();
-
     /**
      * Returns the authentication scheme.
      *
@@ -122,13 +79,6 @@ public interface K8sApiConfig {
      * @return connectivity state to kubernetes API server
      */
     State state();
-
-    /**
-     * Returns the CNI running mode.
-     *
-     * @return running mode
-     */
-    Mode mode();
 
     /**
      * Returns new kubernetes API config instance with given state.
@@ -167,20 +117,6 @@ public interface K8sApiConfig {
     String clientKeyData();
 
     /**
-     * Returns the host Nodes info set.
-     *
-     * @return host nodes info set
-     */
-    Set<HostNodesInfo> infos();
-
-    /**
-     * Returns the distributed virtual router flag value.
-     *
-     * @return true if it supports DVR, false otherwise
-     */
-    boolean dvr();
-
-    /**
      * Builder of new API config entity.
      */
     interface Builder {
@@ -191,30 +127,6 @@ public interface K8sApiConfig {
          * @return kubernetes API config instance
          */
         K8sApiConfig build();
-
-        /**
-         * Returns kubernetes API server config builder with cluster name.
-         *
-         * @param clusterName cluster name
-         * @return kubernetes API config builder
-         */
-        Builder clusterName(String clusterName);
-
-        /**
-         * Returns kubernetes API server config builder with segment ID.
-         *
-         * @param segmentId segment ID
-         * @return kubernetes API config builder
-         */
-        Builder segmentId(int segmentId);
-
-        /**
-         * Returns kubernetes API server config builder with external network CIDR.
-         *
-         * @param extNetworkCidr external network CIDR
-         * @return kubernetes API config builder
-         */
-        Builder extNetworkCidr(IpPrefix extNetworkCidr);
 
         /**
          * Returns kubernetes API server config builder with supplied scheme.
@@ -249,14 +161,6 @@ public interface K8sApiConfig {
         Builder state(State state);
 
         /**
-         * Returns kubernetes API server config builder with supplied mode.
-         *
-         * @param mode CNI running mode
-         * @return kubernetes API config builder
-         */
-        Builder mode(Mode mode);
-
-        /**
          * Returns kubernetes API server config builder with supplied token.
          *
          * @param token token for authentication
@@ -287,21 +191,5 @@ public interface K8sApiConfig {
          * @return kubernetes API config builder
          */
         Builder clientKeyData(String clientKeyData);
-
-        /**
-         * Returns kubernetes API server config builder with supplied hostNodesInfo.
-         *
-         * @param infos hostNodesInfo
-         * @return kubernetes API config builder
-         */
-        Builder infos(Set<HostNodesInfo> infos);
-
-        /**
-         * Returns kubernetes API server config builder with supplied DVR flag.
-         *
-         * @param dvr distributed virtual router flag
-         * @return kubernetes API config builder
-         */
-        Builder dvr(boolean dvr);
     }
 }

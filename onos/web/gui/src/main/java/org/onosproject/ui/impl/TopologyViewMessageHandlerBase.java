@@ -261,11 +261,10 @@ public abstract class TopologyViewMessageHandlerBase extends TopoologyTrafficMes
     // Produces a cluster instance message to the client.
     protected ObjectNode instanceMessage(ClusterEvent event, String msgType) {
         ControllerNode node = event.subject();
-        IpAddress nodeIp = node.ip();
         int switchCount = services.mastership().getDevicesOf(node.id()).size();
         ObjectNode payload = objectNode()
                 .put("id", node.id().toString())
-                .put("ip", nodeIp != null ? nodeIp.toString() : node.host())
+                .put("ip", node.ip().toString())
                 .put("online", services.cluster().getState(node.id()).isActive())
                 .put("ready", services.cluster().getState(node.id()).isReady())
                 .put("uiAttached", node.equals(services.cluster().getLocalNode()))
@@ -273,7 +272,7 @@ public abstract class TopologyViewMessageHandlerBase extends TopoologyTrafficMes
 
         ArrayNode labels = arrayNode();
         labels.add(node.id().toString());
-        labels.add(nodeIp != null ? nodeIp.toString() : node.host());
+        labels.add(node.ip().toString());
 
         // Add labels, props and stuff the payload into envelope.
         payload.set("labels", labels);
@@ -338,13 +337,11 @@ public abstract class TopologyViewMessageHandlerBase extends TopoologyTrafficMes
         Host host = event.subject();
         Host prevHost = event.prevSubject();
         String hostType = host.annotations().value(AnnotationKeys.UI_TYPE);
-        String connectionType = host.annotations().value(AnnotationKeys.CONNECTION_TYPE);
         String ip = ip(host.ipAddresses());
 
         ObjectNode payload = objectNode()
                 .put("id", host.id().toString())
-                .put("type", isNullOrEmpty(hostType) ? "endstation" : hostType)
-                .put("connectionType", isNullOrEmpty(connectionType) ? "wired" : connectionType);
+                .put("type", isNullOrEmpty(hostType) ? "endstation" : hostType);
 
         // set most recent connect point (and previous if we know it)
         payload.set("cp", hostConnect(host.location()));
@@ -378,7 +375,7 @@ public abstract class TopologyViewMessageHandlerBase extends TopoologyTrafficMes
     private ObjectNode hostConnect(HostLocation location) {
         return objectNode()
                 .put("device", location.deviceId().toString())
-                .put("port", location.port().toString());
+                .put("port", location.port().toLong());
     }
 
     // Encodes the specified list of labels a JSON array.
@@ -569,7 +566,7 @@ public abstract class TopologyViewMessageHandlerBase extends TopoologyTrafficMes
 
     private String glyphForHost(Annotations annot) {
         String uiType = annot.value(AnnotationKeys.UI_TYPE);
-        return isNullOrEmpty(uiType) ? DEFAULT_HOST_GLYPH : "m_" + uiType;
+        return isNullOrEmpty(uiType) ? DEFAULT_HOST_GLYPH : uiType;
     }
 
     // Generates a property panel model for a host details response
@@ -640,7 +637,7 @@ public abstract class TopologyViewMessageHandlerBase extends TopoologyTrafficMes
         pp.addProp(LPL_A_TYPE, lion.getSafe(LPL_A_TYPE), lion.getSafe(DEVICE))
                 .addProp(LPL_A_ID, lion.getSafe(LPL_A_ID), did.toString())
                 .addProp(LPL_A_FRIENDLY, lion.getSafe(LPL_A_FRIENDLY), friendlyDevice(did))
-                .addProp(LPL_A_PORT, lion.getSafe(LPL_A_PORT), cp.port().toString())
+                .addProp(LPL_A_PORT, lion.getSafe(LPL_A_PORT), cp.port().toLong())
                 .addSeparator();
     }
 
@@ -650,7 +647,7 @@ public abstract class TopologyViewMessageHandlerBase extends TopoologyTrafficMes
         pp.addProp(LPL_B_TYPE, lion.getSafe(LPL_B_TYPE), lion.getSafe(DEVICE))
                 .addProp(LPL_B_ID, lion.getSafe(LPL_B_ID), did.toString())
                 .addProp(LPL_B_FRIENDLY, lion.getSafe(LPL_B_FRIENDLY), friendlyDevice(did))
-                .addProp(LPL_B_PORT, lion.getSafe(LPL_B_PORT), cp.port().toString())
+                .addProp(LPL_B_PORT, lion.getSafe(LPL_B_PORT), cp.port().toLong())
                 .addSeparator();
     }
 

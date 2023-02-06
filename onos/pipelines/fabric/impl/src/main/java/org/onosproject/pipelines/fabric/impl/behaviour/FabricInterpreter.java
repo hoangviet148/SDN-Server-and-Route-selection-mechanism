@@ -40,7 +40,6 @@ import org.onosproject.net.pi.model.PiTableId;
 import org.onosproject.net.pi.runtime.PiAction;
 import org.onosproject.net.pi.runtime.PiPacketMetadata;
 import org.onosproject.net.pi.runtime.PiPacketOperation;
-import org.onosproject.pipelines.fabric.FabricConstants;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
@@ -53,7 +52,6 @@ import static java.util.stream.Collectors.toList;
 import static org.onlab.util.ImmutableByteSequence.copyFrom;
 import static org.onosproject.net.PortNumber.CONTROLLER;
 import static org.onosproject.net.PortNumber.FLOOD;
-import static org.onosproject.net.PortNumber.TABLE;
 import static org.onosproject.net.flow.instructions.Instruction.Type.OUTPUT;
 import static org.onosproject.net.pi.model.PiPacketOperationType.PACKET_OUT;
 
@@ -64,21 +62,20 @@ public class FabricInterpreter extends AbstractFabricHandlerBehavior
         implements PiPipelineInterpreter {
 
     private static final int PORT_BITWIDTH = 9;
-    public static final byte[] ONE = new byte[]{1};
-    public static final byte[] ZERO = new byte[]{0};
 
     // Group tables by control block.
+    private static final Set<PiTableId> FILTERING_CTRL_TBLS = ImmutableSet.of(
+            FabricConstants.FABRIC_INGRESS_FILTERING_INGRESS_PORT_VLAN,
+            FabricConstants.FABRIC_INGRESS_FILTERING_FWD_CLASSIFIER);
     private static final Set<PiTableId> FORWARDING_CTRL_TBLS = ImmutableSet.of(
             FabricConstants.FABRIC_INGRESS_FORWARDING_MPLS,
             FabricConstants.FABRIC_INGRESS_FORWARDING_ROUTING_V4,
             FabricConstants.FABRIC_INGRESS_FORWARDING_ROUTING_V6,
             FabricConstants.FABRIC_INGRESS_FORWARDING_BRIDGING);
-    private static final Set<PiTableId> PRE_NEXT_CTRL_TBLS  = ImmutableSet.of(
-            FabricConstants.FABRIC_INGRESS_PRE_NEXT_NEXT_MPLS,
-            FabricConstants.FABRIC_INGRESS_PRE_NEXT_NEXT_VLAN);
     private static final Set<PiTableId> ACL_CTRL_TBLS = ImmutableSet.of(
             FabricConstants.FABRIC_INGRESS_ACL_ACL);
     private static final Set<PiTableId> NEXT_CTRL_TBLS = ImmutableSet.of(
+            FabricConstants.FABRIC_INGRESS_NEXT_NEXT_VLAN,
             FabricConstants.FABRIC_INGRESS_NEXT_SIMPLE,
             FabricConstants.FABRIC_INGRESS_NEXT_HASHED,
             FabricConstants.FABRIC_INGRESS_NEXT_XCONNECT);
@@ -165,10 +162,10 @@ public class FabricInterpreter extends AbstractFabricHandlerBehavior
     @Override
     public PiAction mapTreatment(TrafficTreatment treatment, PiTableId piTableId)
             throws PiInterpreterException {
-        if (FORWARDING_CTRL_TBLS.contains(piTableId)) {
+        if (FILTERING_CTRL_TBLS.contains(piTableId)) {
+            return treatmentInterpreter.mapFilteringTreatment(treatment, piTableId);
+        } else if (FORWARDING_CTRL_TBLS.contains(piTableId)) {
             return treatmentInterpreter.mapForwardingTreatment(treatment, piTableId);
-        } else if (PRE_NEXT_CTRL_TBLS.contains(piTableId)) {
-            return treatmentInterpreter.mapPreNextTreatment(treatment, piTableId);
         } else if (ACL_CTRL_TBLS.contains(piTableId)) {
             return treatmentInterpreter.mapAclTreatment(treatment, piTableId);
         } else if (NEXT_CTRL_TBLS.contains(piTableId)) {
@@ -182,46 +179,23 @@ public class FabricInterpreter extends AbstractFabricHandlerBehavior
     }
 
     private PiPacketOperation createPiPacketOperation(
-            ByteBuffer data, long portNumber, boolean doForwarding)
+            DeviceId deviceId, ByteBuffer data, long portNumber)
             throws PiInterpreterException {
+        PiPacketMetadata metadata = createPacketMetadata(portNumber);
         return PiPacketOperation.builder()
                 .withType(PACKET_OUT)
                 .withData(copyFrom(data))
-                .withMetadatas(createPacketMetadata(portNumber, doForwarding))
+                .withMetadatas(ImmutableList.of(metadata))
                 .build();
     }
 
-    private Collection<PiPacketMetadata> createPacketMetadata(
-            long portNumber, boolean doForwarding)
+    private PiPacketMetadata createPacketMetadata(long portNumber)
             throws PiInterpreterException {
         try {
-            ImmutableList.Builder<PiPacketMetadata> builder = ImmutableList.builder();
-            // We have observed an issue with p4lang/PI and BMv2 where in
-            // presence of multiple metadata fields, the PI implementation for
-            // BMv2 provides an erroneous serialization of the packet-out
-            // header, an hence affects the parsing/forwarding behavior. As a
-            // workaround, since we cannot control the order of fields in the
-            // p4runtime.PacketOut message, we modify the interpreter to only
-            // add one field, egress_port or do_forwarding. Both fields
-            // are treated as mutually exclusive by the P4 pipeline, so the
-            // operation is safe. This is against the P4Runtime spec (all fields
-            // should be provided), but supported by bmv2 (unset fields are
-            // initialized to zero).
-            if (portNumber >= 0) {
-                // 0 is a valid port number.
-                builder.add(PiPacketMetadata.builder()
-                        .withId(FabricConstants.EGRESS_PORT)
-                        .withValue(copyFrom(portNumber)
-                                .fit(PORT_BITWIDTH))
-                        .build());
-            }
-            if (doForwarding) {
-                builder.add(PiPacketMetadata.builder()
-                        .withId(FabricConstants.DO_FORWARDING)
-                        .withValue(copyFrom(ONE))
-                        .build());
-            }
-            return builder.build();
+            return PiPacketMetadata.builder()
+                    .withId(FabricConstants.EGRESS_PORT)
+                    .withValue(copyFrom(portNumber).fit(PORT_BITWIDTH))
+                    .build();
         } catch (ImmutableByteSequence.ByteSequenceTrimException e) {
             throw new PiInterpreterException(format(
                     "Port number '%d' too big, %s", portNumber, e.getMessage()));
@@ -249,21 +223,18 @@ public class FabricInterpreter extends AbstractFabricHandlerBehavior
 
         ImmutableList.Builder<PiPacketOperation> builder = ImmutableList.builder();
         for (Instructions.OutputInstruction outInst : outInstructions) {
-            if (outInst.port().equals(TABLE)) {
-                // Logical port. Forward using the switch tables like a regular packet.
-                builder.add(createPiPacketOperation(packet.data(), -1, true));
-            } else if (outInst.port().equals(FLOOD)) {
-                // Logical port. Create a packet operation for each switch port.
-                final DeviceService deviceService = handler().get(DeviceService.class);
-                for (Port port : deviceService.getPorts(packet.sendThrough())) {
-                    builder.add(createPiPacketOperation(packet.data(), port.number().toLong(), false));
-                }
-            } else if (outInst.port().isLogical()) {
+            if (outInst.port().isLogical() && !outInst.port().equals(FLOOD)) {
                 throw new PiInterpreterException(format(
                         "Output on logical port '%s' not supported", outInst.port()));
+            } else if (outInst.port().equals(FLOOD)) {
+                // Since fabric.p4 does not support flooding, we create a packet
+                // operation for each switch port.
+                final DeviceService deviceService = handler().get(DeviceService.class);
+                for (Port port : deviceService.getPorts(packet.sendThrough())) {
+                    builder.add(createPiPacketOperation(deviceId, packet.data(), port.number().toLong()));
+                }
             } else {
-                // Send as-is to given port bypassing all switch tables.
-                builder.add(createPiPacketOperation(packet.data(), outInst.port().toLong(), false));
+                builder.add(createPiPacketOperation(deviceId, packet.data(), outInst.port().toLong()));
             }
         }
         return builder.build();
@@ -290,9 +261,6 @@ public class FabricInterpreter extends AbstractFabricHandlerBehavior
             ImmutableByteSequence portByteSequence = packetMetadata.get().value();
             short s = portByteSequence.asReadOnlyBuffer().getShort();
             ConnectPoint receivedFrom = new ConnectPoint(deviceId, PortNumber.portNumber(s));
-            if (!receivedFrom.port().hasName()) {
-                receivedFrom = translateSwitchPort(receivedFrom);
-            }
             ByteBuffer rawData = ByteBuffer.wrap(packetIn.data().asArray());
             return new DefaultInboundPacket(receivedFrom, ethPkt, rawData);
         } else {
@@ -308,25 +276,10 @@ public class FabricInterpreter extends AbstractFabricHandlerBehavior
     }
 
     @Override
-    public Optional<Long> mapLogicalPort(PortNumber port) {
+    public Optional<Integer> mapLogicalPortNumber(PortNumber port) {
         if (!port.equals(CONTROLLER)) {
             return Optional.empty();
         }
         return capabilities.cpuPort();
-    }
-
-    /* Connect point generated using sb metadata does not have port name
-       we use the device service as translation service */
-    private ConnectPoint translateSwitchPort(ConnectPoint connectPoint) {
-        final DeviceService deviceService = handler().get(DeviceService.class);
-        if (deviceService == null) {
-            log.warn("Unable to translate switch port due to DeviceService not available");
-            return connectPoint;
-        }
-        Port devicePort = deviceService.getPort(connectPoint);
-        if (devicePort != null) {
-            return new ConnectPoint(connectPoint.deviceId(), devicePort.number());
-        }
-        return connectPoint;
     }
 }

@@ -24,8 +24,6 @@ import org.onosproject.net.pi.model.PiTableId;
 import java.util.Collection;
 import java.util.Objects;
 
-import static com.google.common.base.MoreObjects.toStringHelper;
-
 /**
  * Implementation of PiActionProfileModel for P4Runtime.
  */
@@ -91,16 +89,5 @@ final class P4ActionProfileModel implements PiActionProfileModel {
                 && Objects.equals(this.hasSelector, other.hasSelector)
                 && Objects.equals(this.size, other.size)
                 && Objects.equals(this.maxGroupSize, other.maxGroupSize);
-    }
-
-    @Override
-    public String toString() {
-        return toStringHelper(this)
-                .add("id", id)
-                .add("tables", tables)
-                .add("hasSelector", hasSelector)
-                .add("size", size)
-                .add("maxGroupSize", maxGroupSize)
-                .toString();
     }
 }

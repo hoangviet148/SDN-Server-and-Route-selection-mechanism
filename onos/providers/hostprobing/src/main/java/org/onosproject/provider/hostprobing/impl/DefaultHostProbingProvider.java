@@ -29,8 +29,6 @@ import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Host;
 import org.onosproject.net.HostLocation;
-import org.onosproject.net.Port;
-import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.flow.DefaultTrafficTreatment;
 import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.host.HostProbe;
@@ -85,9 +83,6 @@ public class DefaultHostProbingProvider extends AbstractProvider implements Host
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private MastershipService mastershipService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    private DeviceService deviceService;
 
     private HostProviderService providerService;
     private HostProbingProviderService hostProbingProviderService;
@@ -175,23 +170,16 @@ public class DefaultHostProbingProvider extends AbstractProvider implements Host
                 case PROBE_FAIL:
                     // Remove this location if this is a verify probe.
                     if (hostProbe.mode() == ProbeMode.VERIFY) {
-                        ConnectPoint oldConnectPoint = hostProbe.connectPoint();
-                        if (!oldConnectPoint.port().hasName()) {
-                            oldConnectPoint = translateSwitchPort(oldConnectPoint);
-                        }
                         providerService.removeLocationFromHost(hostProbe.id(),
-                                new HostLocation(oldConnectPoint, 0L));
+                                new HostLocation(hostProbe.connectPoint(), 0L));
                     }
                     break;
                 case PROBE_COMPLETED:
                     // Add this location if this is a discover probe.
                     if (hostProbe.mode() == ProbeMode.DISCOVER) {
-                        ConnectPoint newConnectPoint = hostProbe.connectPoint();
-                        if (!newConnectPoint.port().hasName()) {
-                            newConnectPoint = translateSwitchPort(newConnectPoint);
-                        }
-                        providerService.addLocationToHost(hostProbe.id(),
-                                new HostLocation(newConnectPoint, System.currentTimeMillis()));
+                        HostLocation newLocation = new HostLocation(hostProbe.connectPoint(),
+                                System.currentTimeMillis());
+                        providerService.addLocationToHost(hostProbe.id(), newLocation);
                     }
                     break;
                 default:
@@ -258,15 +246,5 @@ public class DefaultHostProbingProvider extends AbstractProvider implements Host
         OutboundPacket outboundPacket = new DefaultOutboundPacket(connectPoint.deviceId(),
                 treatment, ByteBuffer.wrap(probe.serialize()));
         packetService.emit(outboundPacket);
-    }
-
-    /* Connect point generated from netcfg may not have port name
-       we use the device service as translation service */
-    private ConnectPoint translateSwitchPort(ConnectPoint connectPoint) {
-        Port devicePort = deviceService.getPort(connectPoint);
-        if (devicePort != null) {
-            return new ConnectPoint(connectPoint.deviceId(), devicePort.number());
-        }
-        return connectPoint;
     }
 }

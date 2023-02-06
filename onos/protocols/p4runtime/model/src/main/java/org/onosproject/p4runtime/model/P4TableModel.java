@@ -34,8 +34,6 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
-import static com.google.common.base.MoreObjects.toStringHelper;
-
 /**
  * Implementation of PiTableModel for P4Runtime.
  */
@@ -52,7 +50,6 @@ final class P4TableModel implements PiTableModel {
     private final ImmutableMap<PiActionId, PiActionModel> actions;
     private final PiActionModel constDefaultAction;
     private final boolean isConstTable;
-    private final boolean oneShotOnly;
 
     P4TableModel(PiTableId id, PiTableType tableType,
                  PiActionProfileModel actionProfile, long maxSize,
@@ -61,7 +58,7 @@ final class P4TableModel implements PiTableModel {
                  ImmutableMap<PiMatchFieldId, PiMatchFieldModel> matchFields,
                  ImmutableMap<PiActionId, PiActionModel> actions,
                  PiActionModel constDefaultAction,
-                 boolean isConstTable, boolean oneShotOnly) {
+                 boolean isConstTable) {
         this.id = id;
         this.tableType = tableType;
         this.actionProfile = actionProfile;
@@ -73,7 +70,6 @@ final class P4TableModel implements PiTableModel {
         this.actions = actions;
         this.constDefaultAction = constDefaultAction;
         this.isConstTable = isConstTable;
-        this.oneShotOnly = oneShotOnly;
     }
 
     @Override
@@ -131,10 +127,6 @@ final class P4TableModel implements PiTableModel {
         return isConstTable;
     }
 
-    public boolean oneShotOnly() {
-        return oneShotOnly;
-    }
-
     @Override
     public Optional<PiActionModel> action(PiActionId actionId) {
         return Optional.ofNullable(actions.get(actionId));
@@ -170,24 +162,6 @@ final class P4TableModel implements PiTableModel {
                 && Objects.equals(this.supportAging, other.supportAging)
                 && Objects.equals(this.matchFields, other.matchFields)
                 && Objects.equals(this.actions, other.actions)
-                && Objects.equals(this.constDefaultAction, other.constDefaultAction)
-                && Objects.equals(this.oneShotOnly, other.oneShotOnly);
-    }
-
-    @Override
-    public String toString() {
-        return toStringHelper(this)
-                .add("id", id)
-                .add("tableType", tableType)
-                .add("actionProfile", actionProfile)
-                .add("maxSize", maxSize)
-                .add("counters", counters)
-                .add("meters", meters)
-                .add("supportAging", supportAging)
-                .add("matchFields", matchFields)
-                .add("actions", actions)
-                .add("constDefaultAction", constDefaultAction)
-                .add("isConstTable", isConstTable)
-                .toString();
+                && Objects.equals(this.constDefaultAction, other.constDefaultAction);
     }
 }

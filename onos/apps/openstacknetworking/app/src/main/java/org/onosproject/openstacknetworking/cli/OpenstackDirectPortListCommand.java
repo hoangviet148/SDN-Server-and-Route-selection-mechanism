@@ -29,7 +29,6 @@ import java.util.stream.Collectors;
 import static org.onosproject.cli.AbstractShellCommand.get;
 import static org.onosproject.openstacknetworking.api.Constants.DIRECT;
 import static org.onosproject.openstacknetworking.api.Constants.PCISLOT;
-import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.deriveResourceName;
 import static org.onosproject.openstacknetworking.util.OpenstackNetworkingUtil.getIntfNameFromPciAddress;
 
 /**
@@ -60,13 +59,13 @@ public class OpenstackDirectPortListCommand extends AbstractShellCommand {
             Network osNet = service.network(port.getNetworkId());
             if (port.getVifType().equals(UNBOUND)) {
                 print(FORMAT, port.getId(),
-                        deriveResourceName(osNet),
+                        osNet.getName(),
                         port.getMacAddress(),
                         fixedIps.isEmpty() ? "" : fixedIps,
                         UNBOUND, UNBOUND);
             } else {
                 print(FORMAT, port.getId(),
-                        deriveResourceName(osNet),
+                        osNet.getName(),
                         port.getMacAddress(),
                         fixedIps.isEmpty() ? "" : fixedIps,
                         port.getProfile().containsKey(PCISLOT) ?

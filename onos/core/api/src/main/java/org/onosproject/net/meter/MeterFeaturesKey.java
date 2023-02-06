@@ -23,9 +23,7 @@ import java.util.Objects;
  * A meter features key represents a meter features uniquely.
  * Right now only deviceId is used but this class might be useful in
  * virtualization in which a unique deviceId could have multiple features (guess).
- * @deprecated in onos-2.5 replaced by {@link MeterTableKey}
  */
-@Deprecated
 public final class MeterFeaturesKey {
     private final DeviceId deviceId;
 
