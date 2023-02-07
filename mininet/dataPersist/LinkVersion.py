@@ -1,13 +1,18 @@
 from pymongo import MongoClient
 
-# mongo_uri = "mongodb://username:" + urllib.quote("p@ssword") + "@127.0.0.1:27001/"
-mongo_uri = "mongodb://mongodb:27017"
+mongo_uri = "mongodb://admin:admin@mongodb:27017"
 connection = MongoClient(mongo_uri)
 
 # CREATE DATABASE
 database = connection['SDN_data']
 # CREATE COLLECTION
 collection = database['LinkVersion']
+
+try:
+    info = connection.server_info()
+    print("Connected to MongoDB version", info['version'])
+except Exception as e:
+    print("Could not connect to MongoDB:", e)
 
 def is_data_exit(data_search):
     return collection.count_documents({ 'src': data_search['src'] , 'dst': data_search['dst'] }, limit = 1)
@@ -36,7 +41,12 @@ def get_multiple_data():
     get document data by document ID
     :return:
     """
+    print("Hit get_multiple_data funtion")
     data = collection.find({}, {'_id': 0})
+    try:
+        print("data", list(data))
+    except Exception as e:
+        print("==== error at get_multiple_data function ====", e)
     return list(data)
 
 def remove_all():
@@ -48,4 +58,4 @@ def remove_all():
     return
 
 # CLOSE DATABASE
-connection.close()
+# connection.close() 

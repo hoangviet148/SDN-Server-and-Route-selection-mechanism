@@ -1,6 +1,4 @@
 from flask import Flask, request, jsonify
-import tensorflow as tf
-import numpy as np
 import sys, json
 import threading, logging, time
 
@@ -23,8 +21,19 @@ import EndPointModel
 sys.path.append(PATH_ABSOLUTE + '/dataPersist')
 import LinkVersion
 
+sys.path.append(PATH_ABSOLUTE + '/api/routes')
+from ignore_ip_middleware import ignore_ip_middleware
+
+from routes.sdn_controller_handler import sdn_controller_handler
+from routes.predict import predict
+from routes.write_full_data import write_full_data
+
 # init
 app = Flask(__name__)
+# app.wsgi_app = ignore_ip_middleware(app.wsgi_app)
+app.register_blueprint(sdn_controller_handler)
+app.register_blueprint(predict)
+app.register_blueprint(write_full_data)
 
 # get full ip of SDN
 list_ip = json.load(open(PATH_ABSOLUTE + '/setup/setup_topo.json'))["controllers"]
@@ -79,39 +88,6 @@ def read_link_version():
         data = LinkVersion.get_multiple_data()
         return jsonify({'link_versions': data})  # will return the json
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    if request.method == 'POST':
-        request_data = request.get_json()
-        x_test = request_data["flow"]
-
-        model = tf.keras.models.load_model(PATH_ABSOLUTE + "/api/model/model.h5")
-
-        predictions_1flow = model.predict(x_test)
-        one_flow_pred = int(np.argmax(predictions_1flow, axis=-1))
-
-        return str(one_flow_pred)
-
-def deunicodify_hook(pairs):
-    new_pairs = []
-    for key, value in pairs:
-        if isinstance(value, unicode):
-            value = value.encode('utf-8')
-        if isinstance(key, unicode):
-            key = key.encode('utf-8')
-        new_pairs.append((key, value))
-    return dict(new_pairs)
-
-
-@app.route('/write_full_data/',  methods=['GET', 'POST'])
-def write_full_data():
-  if request.method == 'POST':
-    content = request.data
-    data = json.loads(content,  object_pairs_hook=deunicodify_hook)
-    #   del data["_id"]
-    Full_Data.insert_n_data([data['link_versions']])
-    # print(data)
-    return content
 
 # Lay BW
 @app.route('/write_EndPoint/',  methods=['GET', 'POST'])
