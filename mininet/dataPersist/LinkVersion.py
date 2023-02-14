@@ -18,7 +18,9 @@ def is_data_exit(data_search):
     return collection.count_documents({ 'src': data_search['src'] , 'dst': data_search['dst'] }, limit = 1)
 
 def update_many(data_search, data_update):
+    print("=== 1 ===")
     collection.update_many(data_search, {'$set':data_update})
+    print("=== 2 ===")
     return
 
 def insert_n_data(list_data):
@@ -33,7 +35,9 @@ def insert_data(data):
     :param data:
     :return:
     """
-    collection.insert(data)
+    print("=== 1 ===")
+    collection.insert_one(data)
+    print("=== 2 ===")
     return
 
 def get_multiple_data():
@@ -41,10 +45,10 @@ def get_multiple_data():
     get document data by document ID
     :return:
     """
-    print("Hit get_multiple_data funtion")
-    data = collection.find({}, {'_id': 0})
+    print("Hit LinkVersion get_multiple_data funtion")
     try:
-        print("data", list(data))
+        data = collection.find({}, {'_id': 0})
+        # print("===LinkVersion data", list(data))
     except Exception as e:
         print("==== error at get_multiple_data function ====", e)
     return list(data)
@@ -54,7 +58,7 @@ def remove_all():
     remove all documents in collection
     :return:
     """
-    collection.remove({})
+    collection.delete_many({})
     return
 
 # CLOSE DATABASE

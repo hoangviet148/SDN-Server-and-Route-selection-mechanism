@@ -21,14 +21,12 @@ class Topo(object):
         self.hosts = hosts
 
     def set_servers(self, servers):
-        #print("da set server", servers)
         self.servers = servers
 
     def get_hosts(self):  
         return self.hosts
 
     def get_servers(self):
-        #print("da return server")
         return self.servers
 
     def add_node(self, node):
@@ -49,10 +47,6 @@ class Topo(object):
         src_object = edge.get_src()
         dest_object = edge.get_dest()
         weight = edge.get_weight()
-        
-        # print("src_object: ", src_object.get_id())
-        # print("dest_object: ", dest_object.get_id())
-        # print("node: ", self.nodes)
 
         if not (src_object in self.nodes and dest_object in self.nodes):
             raise ValueError('Node not in graph')
@@ -150,8 +144,6 @@ class Topo(object):
                     
             except:
                 print("LOI DOC CANH")
-        # f.write("+++++++++++++++++++++++++++++++++\n")
-        # self.write_topo_file()
 
     def write_topo_file(self):
         url = PATH_ABSOLUTE + "/topo_file.txt"

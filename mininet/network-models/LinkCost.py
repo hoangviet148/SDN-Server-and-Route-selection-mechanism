@@ -1,7 +1,6 @@
 from pymongo import MongoClient
 
-# mongo_uri = "mongodb://username:" + urllib.quote("p@ssword") + "@127.0.0.1:27001/"
-mongo_uri = "mongodb://localhost:27017/"
+mongo_uri = "mongodb://admin:admin@mongodb:27017/"
 connection = MongoClient(mongo_uri)
 
 # CREATE DATABASE
@@ -39,8 +38,8 @@ def remove_all():
     remove all documents in collection
     :return:
     """
-    collection.remove({})
+    collection.delete_many({})
     return
     
 # CLOSE DATABASE
-connection.close()
+# connection.close()

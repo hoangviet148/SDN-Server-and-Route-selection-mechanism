@@ -80,41 +80,21 @@ def get_ip_server():
         print(dest_ip)
         return str(dest_ip)
 
-
 @app.route('/read_link_version/',  methods=['GET', 'POST'])
 def read_link_version():
-    # API: get data from load send to CCDN when there is a request to read N_r SDNs
     if request.method == 'GET':
         data = LinkVersion.get_multiple_data()
-        return jsonify({'link_versions': data})  # will return the json
+        return jsonify({'link_versions': data}) 
 
-
-# Lay BW
-@app.route('/write_EndPoint/',  methods=['GET', 'POST'])
-def write_EndPoint():
-  if request.method == 'POST':
-    content = request.data
-    # print(json.loads(content)['EndPoint_datas'])
-    end_point = json.loads(content)['EndPoint_datas']
-    data_search = {
-        'srcLink': end_point['srcLink'], 'portInfo': end_point['portInfo']}
-    if EndPointModel.is_data_exit(end_point):
-        EndPointModel.update_many(data_search, end_point)
-    else:
-        EndPointModel.insert_data(end_point)
-    return content
-
-# fix cung R, W
 def ccdn():
     global starttime
-    R = 4
-    W = 0
     while True:
-        if time.time() - starttime > 45:
-            RD, WD, V_staleness = update_weight.load_CCDN(R, W)
-
+        if time.time() - starttime > 10:
+            print("=== Update weight ccdn ===")
+            update_weight.load_ccdn()
             # cap nhap trong so cho server
-            update_server.update_server_cost()
+            # print("=== Update server weight ===")
+            # update_server.update_server_cost()
             starttime = time.time()
 
 def flask_app():

@@ -2,7 +2,6 @@ from json import encoder
 from flask import Blueprint, request
 import sys, json
 
-
 PATH_ABSOLUTE = "/app"
 
 sys.path.append(PATH_ABSOLUTE + '/cost-models')

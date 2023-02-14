@@ -50,18 +50,10 @@ def remove_all():
     remove all documents in collection
     :return:
     """
-    collection.remove({})
+    collection.delete_many({})
     return
 # CLOSE DATABASE
-connection.close()
-
-
-
-
-
-
-
-
+# connection.close()
 
 
 # weights = Model.find({})

@@ -15,7 +15,7 @@ def insert_data(data):
     :param data:
     :return:
     """
-    collection.insert(data)
+    collection.insert_one(data)
     return
 
 def insert_n_data(list_data):
@@ -23,8 +23,9 @@ def insert_n_data(list_data):
         return
     else:
         for data in list_data:
+            print("===Full_Data insert_n_data data: ", data)
             if not collection.find_one(data): 
-                collection.insert(data)
+                collection.insert_one(data)
 
 
 def get_multiple_data():
@@ -37,7 +38,7 @@ def get_multiple_data():
 
 
 # CLOSE DATABASE
-connection.close()
+# connection.close()
 
 # weights = Model.find({})
 # for w in weights:

@@ -51,8 +51,8 @@ class updateLinkTopo(object):
                         }     
             try:
                  LinkCost.insert_data(temp_data)            
-            except:
-                 print("--------------- Write Link Cost loi")
+            except Exception as e:
+                 print("--------------- Write Link Cost loi", e)
                 
         self.link_set = list()
            
@@ -123,6 +123,9 @@ class WeightLink(object):
                 return training_cost
             
         def get_training_cost(self, link_cost):    
+            return self.alpha * link_cost[0] + self.beta * link_cost[1] + self.gamma * link_cost[2]
+
+        def get_training_cost_file_transfer(self, link_cost):    
             return self.alpha * link_cost[0] + self.beta * link_cost[1] + self.gamma * link_cost[2]
 
         def get_min_max_scale(self, x):

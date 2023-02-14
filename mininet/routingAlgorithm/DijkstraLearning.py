@@ -21,7 +21,7 @@ class hostServerConnection(object):
         self.priority = priority
 
         # cap nhap trong so do thi
-        # self.update_topo()
+        self.update_topo(0)
 
         # khoi tao thuat toan tim duong
         self.sol = ""
@@ -50,7 +50,6 @@ class hostServerConnection(object):
     def find_shortest_path(self):
 
         ##### alpha * path cost + beta * server cost
-        # print("123")
         min_cost = 0
         host_object = self.find_src()
         the_first_key = list(self.servers)[0]

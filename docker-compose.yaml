@@ -20,7 +20,7 @@ services:
   onos-1:
     container_name: onos-1
     hostname: onos-1
-    image: local/onos:v2
+    image: local/onos:v1
     ports:
       - 8181:8181
     environment:
@@ -34,7 +34,7 @@ services:
   onos-2:
     container_name: onos-2
     hostname: onos-2
-    image: local/onos:v2
+    image: local/onos:v1
     ports:
       - 8182:8181
     environment:

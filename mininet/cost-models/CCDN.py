@@ -42,4 +42,4 @@ def remove_all():
     return
     
 # CLOSE DATABASE
-connection.close()
+# connection.close()

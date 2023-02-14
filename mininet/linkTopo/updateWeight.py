@@ -72,8 +72,8 @@ class updateWeight(object):
     def write_update_link_to_data_base(self):
         try:
             LinkVersion.remove_all()
-        except:
-            print("Remove loi .................")
+        except Exception as e:
+            print("Remove loi .................", e)
 
         self.link_version += 1
         self.count +=1
@@ -90,7 +90,7 @@ class updateWeight(object):
             packet_loss = weight[2] if weight[1] == 1.0 and weight[1] == 0.0 else random.uniform(0.02, 0.26)
             byte_sent = weight[3]
             byte_received = weight[4]
-            overhead = abs((byte_sent + byte_received)) / 1000000 + 10# convert to MB
+            overhead = abs((byte_sent + byte_received)) / 1000000 + 10 # convert to MB
 
             temp_data = {"src": src,
                          "dst": dst,
@@ -102,7 +102,7 @@ class updateWeight(object):
                          "overhead": float(overhead),
                          "byteSent": float(byte_sent),
                          "byteReceived": float(byte_received)
-                         }
+                        }
             try:
                 data_search = { 'src': temp_data['src'], 'dst': temp_data['dst'] }
                 print("INSERT LINK VERSION")
@@ -126,3 +126,4 @@ class updateWeight(object):
                 # print("Thanh cong")
         except:
             print("flask Goi nhieu SDN loiiiiiiiiiiiiiiiiiiiii")
+   
