@@ -102,4 +102,4 @@ def flask_app():
 
 if __name__ == '__main__':
     threading.Thread(target=flask_app).start()
-    threading.Thread(target=ccdn).start()
+    # threading.Thread(target=ccdn).start()

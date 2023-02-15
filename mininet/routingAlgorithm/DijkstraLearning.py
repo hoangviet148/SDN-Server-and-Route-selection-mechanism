@@ -21,7 +21,7 @@ class hostServerConnection(object):
         self.priority = priority
 
         # cap nhap trong so do thi
-        self.update_topo(0)
+        # self.update_topo(0)
 
         # khoi tao thuat toan tim duong
         self.sol = ""

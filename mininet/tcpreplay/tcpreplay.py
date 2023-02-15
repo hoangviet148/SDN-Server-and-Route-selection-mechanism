@@ -19,9 +19,9 @@ output_pcap_file = "%s-%s-%s.pcap" % (CLIENT, SERVER, SERVICE_NAME)
 def replay():
     print("start replay")
     command = f"""
-    tcpreplay --intf1='{CLIENT}-eth0' {output_pcap_file}
+    tcpreplay --intf1='{CLIENT}-eth0' --loop=1 --stats='response_times.txt' {output_pcap_file}
     """
-    subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+    subprocess.run(["bash", "-c", command])
     print("End replay")
 
 if os.path.exists(output_pcap_file):

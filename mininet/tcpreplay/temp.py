@@ -1,16 +1,18 @@
-from scapy.all import rdpcap
+from collections import Counter
+from scapy.all import sniff
 
-pcap_file = "./VoIP/VoIP.pcap"
-packets = rdpcap(pcap_file)
+## Create a Packet Counter
+packet_counts = Counter()
 
-src_ips = set()
-dst_ips = set()
+## Define our Custom Action function
+def custom_action(packet):
+    # Create tuple of Src/Dst in sorted order
+    key = tuple(sorted([packet[0][1].src, packet[0][1].dst]))
+    packet_counts.update([key])
+    return f"Packet #{sum(packet_counts.values())}: {packet[0][1].src} ==> {packet[0][1].dst}"
 
-for packet in packets:
-    src_ip = packet[IP].src
-    dst_ip = packet[IP].dst
-    src_ips.add(src_ip)
-    dst_ips.add(dst_ip)
+## Setup sniff, filtering for IP traffic
+sniff(filter="host 172.10.0.21", prn=custom_action, count=10)
 
-print(src_ips)
-print(dst_ips)
+## Print out packet count per A <--> Z address pair
+print("\n".join(f"{f'{key[0]} <--> {key[1]}'}: {count}" for key, count in packet_counts.items()))
