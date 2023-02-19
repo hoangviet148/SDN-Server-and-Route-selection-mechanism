@@ -101,6 +101,20 @@ services:
       esnet1:
         ipv4_address: 172.10.0.14
 
+  jupyter:
+    image: local/jupyter:python-3.10.8
+    container_name: jupyter
+    ports: 
+      - "8888:8888"
+    volumes:
+     - ./jupyter/work:/home/jovyan/work
+     - ./jupyter/dataset:/home/jovyan/dataset
+     - ./jupyter/config/jupyter-config.json:/home/jovyan/.jupyter/jupyter_notebook_config.json
+     - ./jupyter/config:/home/jovyan/.jupyter/config
+    networks:
+      esnet1:
+        ipv4_address: 172.10.0.15
+
 networks:
   esnet1:
     driver: bridge
@@ -108,17 +122,6 @@ networks:
       driver: default
       config:
         - subnet: 172.10.0.0/16
-  # jupyter:
-  #   image: local/jupyter:python-3.10.8
-  #   container_name: jupyter
-  #   ports: 
-  #     - "8888:8888"
-  #   volumes:
-  #    - ./jupyter/work:/home/jovyan/work
-  #    - ./jupyter/dataset:/home/jovyan/dataset
-  #    - ./jupyter/config/jupyter-config.json:/home/jovyan/.jupyter/jupyter_notebook_config.json
-  #    - ./jupyter/config:/home/jovyan/.jupyter/config
-  #   networks:
-  #     esnet1:
-  #       ipv4_address: 172.10.0.15
+
+
 

@@ -4,22 +4,28 @@ import subprocess
 
 CLIENT = sys.argv[1]
 SERVER = sys.argv[2]
+SERVICE_NAME = sys.argv[3]
 
-CLIENT_IP = sys.argv[3]
-CLIENT_MAC = sys.argv[4]
+CLIENT_IP = ""
+CLIENT_MAC = ""
+SERVER_IP = ""
+SERVER_MAC = ""
+try:
+    CLIENT_IP = sys.argv[4]
+    CLIENT_MAC = sys.argv[5]
+    SERVER_IP = sys.argv[6]
+    SERVER_MAC = sys.argv[7]
+except IndexError:
+    print("The command line parameter was not provided")
 
-SERVER_IP = sys.argv[5]
-SERVER_MAC = sys.argv[6]
 
-SERVICE_NAME = sys.argv[7]
-
-input_pcap_file = "./%s/%s.pcap" % (SERVICE_NAME, SERVICE_NAME)
+input_pcap_file = f"./%s/%s.pcap" % (SERVICE_NAME, SERVICE_NAME)
 output_pcap_file = "%s-%s-%s.pcap" % (CLIENT, SERVER, SERVICE_NAME)
 
 def replay():
     print("start replay")
     command = f"""
-    tcpreplay --intf1='{CLIENT}-eth0' --loop=1 --stats='response_times.txt' {output_pcap_file}
+    tcpreplay --intf1='{CLIENT}-eth0' --loop=1 {output_pcap_file}
     """
     subprocess.run(["bash", "-c", command])
     print("End replay")

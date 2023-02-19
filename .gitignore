@@ -6,6 +6,7 @@
 /mininet/**/__pycache__
 /mininet/**/*.pyc
 /mininet/inference/packet-capture.log
+/mininet/inference/env
 /mininet/**/*.pcap
 
 /onos/*
