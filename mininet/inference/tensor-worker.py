@@ -32,6 +32,8 @@ class ThreadedConsumer(threading.Thread):
 
         temp = next(iter(message.values()))
         list_of_lists = temp["data"]
+        ip_src = temp["ip_src"]
+
         # Determine the maximum length of the lists
         max_len = max(len(lst) for lst in list_of_lists)
 
@@ -44,11 +46,11 @@ class ThreadedConsumer(threading.Thread):
         x_test = x_test.reshape(-1, 20, 128, 1)
         prediction = model.predict(x_test)
         one_flow_pred = int(np.argmax(prediction, axis=-1))
-
+    
         label_dict = {'FileTransfer': 0, 'Music': 1, 'VoIP': 2, 'Youtube': 3}
         for key, value in label_dict.items():
             if one_flow_pred == value:
-                print(f"==== one_flow_pred ==== {key}")
+                print(f"==== one_flow_prediction ==== {key}")
 
         return one_flow_pred
 
